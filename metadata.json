@@ -1,0 +1,6 @@
+{
+  "name": "Liquid Files",
+  "description": "Minimal luxury liquid glass file manager with real-time storage visualizer, AES-256 vault, deep cleaner, and wireless sharing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Center 66dp safe zone: X: 21..87, Y: 21..87 -->
+    <!-- Folder Back flap -->
+    <path
+        android:pathData="M32,38 L48,38 L54,44 L76,44 C78.2,44 80,45.8 80,48 L80,54 L28,54 L28,42 C28,39.8 29.8,38 32,38 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="28"
+                android:startY="38"
+                android:endX="80"
+                android:endY="54"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#7C4DFF" />
+                <item android:offset="1.0" android:color="#00E5FF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Liquid Glass Front flap -->
+    <path
+        android:pathData="M28,50 L80,50 C82.2,50 84,51.8 84,54 L84,72 C84,74.2 82.2,76 80,76 L28,76 C25.8,76 24,74.2 24,72 L24,54 C24,51.8 25.8,50 28,50 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="24"
+                android:startY="50"
+                android:endX="84"
+                android:endY="76"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#00E5FF" />
+                <item android:offset="0.5" android:color="#00B0FF" />
+                <item android:offset="1.0" android:color="#7C4DFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Glass Highlight Sheen -->
+    <path
+        android:pathData="M28,51 L80,51 C81.5,51 82.8,52 83.5,53.2 L25.5,53.2 C26.2,52 27.2,51 28,51 Z"
+        android:fillColor="#80FFFFFF" />
+    <!-- Center Liquid Ring / Safe Lock Dot -->
+    <path
+        android:pathData="M54,60 A4,4 0 1,1 53.99,60 Z"
+        android:fillColor="#FFFFFF" />
+</vector>
