@@ -26,11 +26,24 @@ jobs:
       - name: Build APK
         run: |
           set -eo pipefail
-          SETTINGS=$(find . -maxdepth 3 \( -name settings.gradle -o -name settings.gradle.kts \) | head -n 1)
-          if [ -z "$SETTINGS" ]; then
-            echo "settings.gradle nahi mila" | tee /tmp/build.log
-            exit 1
-          fi
+          SETTINGS=$(find . -maxdepth 3 -name 'settings.gradle*' | head -n 1)
           cd "$(dirname "$SETTINGS")"
-          if [ -f gradlew ]; then
-            chmod +x gradlew
+          CMD=gradle
+          [ -f gradlew ] && CMD=./gradlew
+          [ -f gradlew ] && chmod +x gradlew
+          $CMD assembleDebug --stacktrace --no-daemon 2>&1 | tee /tmp/build.log
+
+      - name: Show error in summary
+        if: failure()
+        run: |
+          echo "### Build error" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          grep -m1 -A 25 "What went wrong" /tmp/build.log >> $GITHUB_STEP_SUMMARY || tail -n 40 /tmp/build.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: liquid-files-debug-apk
+          path: "**/build/outputs/apk/debug/*.apk"
+          if-no-files-found: error
