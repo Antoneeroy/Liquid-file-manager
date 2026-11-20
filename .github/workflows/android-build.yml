@@ -25,27 +25,12 @@ jobs:
 
       - name: Build APK
         run: |
-          set -e
+          set -eo pipefail
           SETTINGS=$(find . -maxdepth 3 \( -name settings.gradle -o -name settings.gradle.kts \) | head -n 1)
           if [ -z "$SETTINGS" ]; then
-            echo "settings.gradle nahi mila. Repo structure:"
-            ls -R | head -n 60
+            echo "settings.gradle nahi mila" | tee /tmp/build.log
             exit 1
           fi
-          PROJECT_DIR=$(dirname "$SETTINGS")
-          echo "Project folder: $PROJECT_DIR"
-          cd "$PROJECT_DIR"
+          cd "$(dirname "$SETTINGS")"
           if [ -f gradlew ]; then
             chmod +x gradlew
-            ./gradlew assembleDebug --stacktrace
-          else
-            echo "gradlew nahi mila, system gradle use ho raha hai"
-            gradle assembleDebug --stacktrace
-          fi
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: liquid-files-debug-apk
-          path: "**/build/outputs/apk/debug/*.apk"
-          if-no-files-found: error
