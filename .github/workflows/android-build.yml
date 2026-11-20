@@ -23,6 +23,18 @@ jobs:
         with:
           gradle-version: 9.3.1
 
+      - name: Create debug keystore
+        run: |
+          SETTINGS=$(find . -maxdepth 3 -name 'settings.gradle*' | head -n 1)
+          DIR=$(dirname "$SETTINGS")
+          mkdir -p ~/.android
+          for KS in "$DIR/debug.keystore" "$HOME/.android/debug.keystore"; do
+            [ -f "$KS" ] || keytool -genkeypair -keystore "$KS" \
+              -storepass android -keypass android \
+              -alias androiddebugkey -keyalg RSA -keysize 2048 \
+              -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          done
+
       - name: Build APK
         run: |
           set -eo pipefail
