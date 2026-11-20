@@ -13,10 +13,13 @@ Development builds default to official Google Test Ad Unit IDs so clicks/renders
 - `ADMOB_APP_ID` (injected into `AndroidManifest.xml` `${ADMOB_APP_ID}`)
 - `ADMOB_BANNER_UNIT_ID` (injected into `BuildConfig.ADMOB_BANNER_UNIT_ID`)
 - `ADMOB_NATIVE_UNIT_ID` (injected into `BuildConfig.ADMOB_NATIVE_UNIT_ID`)
+- `ADMOB_INTERSTITIAL_UNIT_ID` (injected into `BuildConfig.ADMOB_INTERSTITIAL_UNIT_ID`)
+- `PRIVACY_POLICY_URL` (defaults to `https://antoneeroy.github.io/Liquid-file-manager/privacy-policy.html`)
 
 ### Placement Rules Verified in Code
 - Banner ads appear only at the bottom of `DashboardScreen` and `FileExplorerScreen` (automatically hidden while multi-selecting files, using clipboard paste bars, or opening context menus).
 - Native ad card appears only below analyzer/cleaner cards in `StorageOptimizerScreen` (hidden until loaded—zero blank placeholder boxes).
+- Interstitial ads are preloaded only after UMP consent, rate-limited with a 3-minute minimum cooldown, and shown strictly when exiting Storage Optimizer—never inside Safe Vault or during file operations.
 - **Safe Vault (`SafeVaultScreen`) and all file/media viewers contain ZERO ads.**
 
 ---

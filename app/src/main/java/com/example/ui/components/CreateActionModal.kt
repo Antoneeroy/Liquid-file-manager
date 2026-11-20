@@ -16,10 +16,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.NoteAdd
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -106,7 +106,7 @@ fun CreateActionModal(
                     modifier = Modifier.weight(1f),
                     title = "New Document",
                     subtitle = "Notes / Code",
-                    icon = Icons.Filled.NoteAdd,
+                    icon = Icons.AutoMirrored.Filled.NoteAdd,
                     gradient = listOf(ElectricPurple, SunsetPink),
                     testTag = "action_new_document",
                     onClick = {

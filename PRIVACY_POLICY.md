@@ -80,5 +80,5 @@ Liquid Files is a general-utility file management tool and is not directed at ch
 
 We may update this Privacy Policy to reflect new OS requirements or SDK disclosures. Before publishing on Google Play or Uptodown, replace the contact placeholder below with your active support email address and publish this document at a stable HTTPS URL:
 
-- **Developer / Support Email:** `<REPLACE_WITH_YOUR_SUPPORT_EMAIL>`
-- **Public Policy URL:** `<REPLACE_WITH_YOUR_HOSTED_HTTPS_PRIVACY_URL>`
+- **Developer / Support Email:** `antoneeroy30@gmail.com`
+- **Public Policy URL:** `https://antoneeroy.github.io/Liquid-file-manager/privacy-policy.html` (source HTML hosted at `docs/privacy-policy.html` in this repository)

@@ -362,6 +362,29 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    private var searchJob: Job? = null
+
+    fun searchInExplorer(query: String) {
+        searchJob?.cancel()
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) {
+            val activeCat = _selectedCategoryFilter.value
+            viewModelScope.launch {
+                _currentFiles.value = if (activeCat == null) {
+                    repository.getFilesInDirectory(_currentPath.value, showHidden = _showHiddenFiles.value)
+                } else {
+                    repository.getFilesByCategory(activeCat)
+                }
+            }
+            return
+        }
+        if (trimmed.length < 2) return
+        searchJob = viewModelScope.launch {
+            delay(180L)
+            _currentFiles.value = repository.searchFiles(trimmed, showHidden = _showHiddenFiles.value)
+        }
+    }
+
     fun openContentUri(uri: Uri) {
         viewModelScope.launch {
             val resolved = repository.resolveContentUriToFileItem(uri)

@@ -54,7 +54,11 @@ class FileManagerRepository(private val context: Context) {
 
     fun hasAllFilesAccess(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Environment.isExternalStorageManager()
+            try {
+                Environment.isExternalStorageManager()
+            } catch (_: Throwable) {
+                false
+            }
         } else {
             val read = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
             val write = ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
@@ -75,13 +79,20 @@ class FileManagerRepository(private val context: Context) {
 
     val rootPath: String
         get() {
-            val ext = Environment.getExternalStorageDirectory()
-            return if (ext != null && ext.exists() && ext.canRead() && ext.listFiles() != null) {
-                ext.absolutePath
-            } else {
-                // Scoped app external files root when broad storage permission is not granted
-                (context.getExternalFilesDir(null) ?: context.filesDir).apply { if (!exists()) mkdirs() }.absolutePath
+            val ext = try {
+                Environment.getExternalStorageDirectory()
+            } catch (_: Throwable) {
+                null
             }
+            if (ext != null && ext.exists() && ext.canRead() && ext.listFiles() != null) {
+                return ext.absolutePath
+            }
+            val scopedExt = try {
+                context.getExternalFilesDir(null)
+            } catch (_: Throwable) {
+                null
+            }
+            return (scopedExt ?: context.filesDir).apply { if (!exists()) mkdirs() }.absolutePath
         }
 
     fun getAccessibleSdCardRoot(): String? {
@@ -194,7 +205,11 @@ class FileManagerRepository(private val context: Context) {
 
             // 2. Fallback to StatFs on primary storage directory
             if (totalBytes <= 0L) {
-                val ext = Environment.getExternalStorageDirectory()
+                val ext = try {
+                    Environment.getExternalStorageDirectory()
+                } catch (_: Throwable) {
+                    null
+                }
                 val targetDir = when {
                     ext != null && ext.exists() -> ext
                     else -> Environment.getDataDirectory()
@@ -317,6 +332,67 @@ class FileManagerRepository(private val context: Context) {
                 )
             )
         }
+        result.sortedWith(
+            compareBy<FileItem> { !it.isDirectory }
+                .thenBy { it.name.lowercase() }
+        )
+    }
+
+    suspend fun searchFiles(
+        query: String,
+        showHidden: Boolean = false,
+        limit: Int = 250,
+        searchRoot: String = rootPath
+    ): List<FileItem> = withContext(Dispatchers.IO) {
+        val needle = query.trim().lowercase()
+        if (needle.isEmpty()) return@withContext emptyList()
+
+        val root = File(searchRoot)
+        val favoritePaths = favoriteDao.getAllFavoritePaths().toHashSet()
+        val seen = mutableSetOf<String>()
+        val result = mutableListOf<FileItem>()
+
+        if (root.exists() && root.canRead()) {
+            val scanned = listAllFilesRecursively(root, maxDepth = 5, maxFiles = 6000)
+            for (file in scanned) {
+                currentCoroutineContext().ensureActive()
+                if (!showHidden && file.name.startsWith(".")) continue
+                if (!isUserManagedPathSafe(file)) continue
+                if (file.name.lowercase().contains(needle)) {
+                    if (seen.add(file.absolutePath)) {
+                        val isDir = file.isDirectory
+                        result.add(
+                            FileItem(
+                                path = file.absolutePath,
+                                name = file.name,
+                                size = if (isDir) 0L else file.length(),
+                                lastModified = file.lastModified(),
+                                isDirectory = isDir,
+                                category = FileItem.getCategoryForFile(file),
+                                extension = file.extension.lowercase(),
+                                itemCount = if (isDir) (file.list()?.size ?: 0) else 0,
+                                isFavorite = favoritePaths.contains(file.absolutePath)
+                            )
+                        )
+                        if (result.size >= limit) break
+                    }
+                }
+            }
+        }
+
+        if (result.size < limit && hasMediaPermissions()) {
+            for (cat in listOf(FileCategory.IMAGES, FileCategory.VIDEOS, FileCategory.AUDIO)) {
+                val msItems = queryMediaStore(cat, limit = 500)
+                for (item in msItems) {
+                    if (item.name.lowercase().contains(needle) && seen.add(item.path)) {
+                        result.add(item)
+                        if (result.size >= limit) break
+                    }
+                }
+                if (result.size >= limit) break
+            }
+        }
+
         result.sortedWith(
             compareBy<FileItem> { !it.isDirectory }
                 .thenBy { it.name.lowercase() }

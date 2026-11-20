@@ -36,6 +36,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
@@ -57,10 +59,8 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
-import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -155,6 +155,7 @@ fun FileExplorerScreen(
     onOpenSafPicker: () -> Unit,
     selectedCategory: FileCategory? = null,
     onSelectCategory: (FileCategory?) -> Unit = {},
+    onSearchQueryChange: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val isDark = LocalIsDarkTheme.current
@@ -290,7 +291,7 @@ fun FileExplorerScreen(
                                 .background(Color(0x1AFFFFFF))
                         ) {
                             Icon(
-                                imageVector = if (viewMode == ViewMode.LIST) Icons.Filled.GridView else Icons.Filled.ViewList,
+                                imageVector = if (viewMode == ViewMode.LIST) Icons.Filled.GridView else Icons.AutoMirrored.Filled.ViewList,
                                 contentDescription = "Toggle View",
                                 tint = if (isDark) TextPrimary else LightTextPrimary,
                                 modifier = Modifier.size(20.dp)
@@ -305,7 +306,7 @@ fun FileExplorerScreen(
                                     .clip(CircleShape)
                                     .background(Color(0x1AFFFFFF))
                             ) {
-                                Icon(Icons.Filled.Sort, contentDescription = "Sort", tint = if (isDark) TextPrimary else LightTextPrimary, modifier = Modifier.size(20.dp))
+                                Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort", tint = if (isDark) TextPrimary else LightTextPrimary, modifier = Modifier.size(20.dp))
                             }
 
                             DropdownMenu(
@@ -362,7 +363,10 @@ fun FileExplorerScreen(
 
             OutlinedTextField(
                 value = searchQuery,
-                onValueChange = { searchQuery = it },
+                onValueChange = {
+                    searchQuery = it
+                    onSearchQueryChange(it)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("input_explorer_search"),
@@ -372,7 +376,10 @@ fun FileExplorerScreen(
                 },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
+                        IconButton(onClick = {
+                            searchQuery = ""
+                            onSearchQueryChange("")
+                        }) {
                             Icon(Icons.Filled.Clear, contentDescription = "Clear", tint = if (isDark) TextSecondary else LightTextSecondary, modifier = Modifier.size(18.dp))
                         }
                     }

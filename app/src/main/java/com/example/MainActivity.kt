@@ -99,6 +99,11 @@ class MainActivity : FragmentActivity() {
                                 viewModel.refreshAll()
                             }
                         }
+                    },
+                    onOptimizerSafeExit = {
+                        AdConsentManager.maybeShowInterstitialOnSafeBreak(this) {
+                            viewModel.selectTab(NavigationTab.DASHBOARD)
+                        }
                     }
                 )
             }
@@ -150,7 +155,8 @@ class MainActivity : FragmentActivity() {
 fun MainAppScreen(
     viewModel: FileManagerViewModel,
     onRequestBiometricPrompt: (onSuccess: () -> Unit, onError: (String) -> Unit) -> Unit,
-    onOpenPrivacyOptions: () -> Unit
+    onOpenPrivacyOptions: () -> Unit,
+    onOptimizerSafeExit: () -> Unit
 ) {
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -385,6 +391,7 @@ fun MainAppScreen(
                             canRequestAds = canRequestAds,
                             selectedCategory = selectedCategoryFilter,
                             onSelectCategory = { viewModel.setCategoryFilter(it) },
+                            onSearchQueryChange = { viewModel.searchInExplorer(it) },
                             onNavigateTo = { viewModel.loadCurrentDirectory(it) },
                             onNavigateUp = { viewModel.navigateUp() },
                             onOpenFile = { viewModel.openFile(it) },
@@ -449,7 +456,7 @@ fun MainAppScreen(
                             onDeleteDuplicate = { viewModel.deleteDuplicateFile(it) },
                             onRestoreTrash = { viewModel.restoreTrashItem(it) },
                             onEmptyTrash = { viewModel.emptyTrash() },
-                            onNavigateBack = { viewModel.selectTab(NavigationTab.DASHBOARD) }
+                            onNavigateBack = onOptimizerSafeExit
                         )
                     }
 

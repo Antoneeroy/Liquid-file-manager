@@ -24,8 +24,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Backspace
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
@@ -485,7 +485,7 @@ fun SafeVaultScreen(
                                         "DEL" -> {
                                             KeypadCircleButton(
                                                 content = {
-                                                    Icon(Icons.Filled.Backspace, contentDescription = "Delete Digit", tint = if (isDark) TextSecondary else LightTextSecondary, modifier = Modifier.size(22.dp))
+                                                    Icon(Icons.AutoMirrored.Filled.Backspace, contentDescription = "Delete Digit", tint = if (isDark) TextSecondary else LightTextSecondary, modifier = Modifier.size(22.dp))
                                                 },
                                                 onClick = {
                                                     if (enteredPin.isNotEmpty()) {

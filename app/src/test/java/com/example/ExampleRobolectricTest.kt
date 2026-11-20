@@ -153,6 +153,10 @@ class ExampleRobolectricTest {
         val renamedFile = File(safeFolder, "renamed_note.txt")
         assertTrue(renamedFile.exists())
 
+        // Search nested folder file via repository.searchFiles
+        val nestedSearchHits = repo.searchFiles("renamed_note", showHidden = false, searchRoot = workspace.absolutePath)
+        assertTrue(nestedSearchHits.any { it.name == "renamed_note.txt" })
+
         // Delete to trash and verify trash record created
         val fileItem = FileItem(
             path = renamedFile.absolutePath,

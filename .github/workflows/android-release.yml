@@ -42,6 +42,8 @@ jobs:
           ADMOB_APP_ID: ${{ secrets.ADMOB_APP_ID }}
           ADMOB_BANNER_UNIT_ID: ${{ secrets.ADMOB_BANNER_UNIT_ID }}
           ADMOB_NATIVE_UNIT_ID: ${{ secrets.ADMOB_NATIVE_UNIT_ID }}
+          ADMOB_INTERSTITIAL_UNIT_ID: ${{ secrets.ADMOB_INTERSTITIAL_UNIT_ID }}
+          PRIVACY_POLICY_URL: ${{ secrets.PRIVACY_POLICY_URL }}
         run: |
           if [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_PASSWORD" ]; then
             echo "ERROR: STORE_PASSWORD and KEY_PASSWORD secrets must be configured."

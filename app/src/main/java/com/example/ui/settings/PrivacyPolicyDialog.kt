@@ -13,21 +13,25 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.BuildConfig
 import com.example.ui.theme.LightTextPrimary
 import com.example.ui.theme.LightTextSecondary
 import com.example.ui.theme.LocalIsDarkTheme
@@ -42,6 +46,7 @@ fun PrivacyPolicyDialog(
     onManagePrivacyOptions: (() -> Unit)? = null
 ) {
     val isDark = LocalIsDarkTheme.current
+    val uriHandler = LocalUriHandler.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -95,13 +100,42 @@ fun PrivacyPolicyDialog(
 
                 PolicySection(
                     title = "4. Advertising & Consent (Google AdMob + UMP)",
-                    body = "Liquid Files displays non-intrusive Google AdMob banner and native ads outside Safe Vault and file operation dialogs. Where required by law (EEA/UK/US states), Google User Messaging Platform (UMP) collects your ad consent choices. Google Mobile Ads SDK may collect Advertising ID (AD_ID), approximate IP-based region, diagnostics, and ad interaction telemetry in accordance with Google's Privacy Policy."
+                    body = "Liquid Files displays non-intrusive Google AdMob banner and native ads outside Safe Vault and file operation dialogs, plus strictly capped interstitial ads only at safe natural navigation breaks. Where required by law (EEA/UK/US states), Google User Messaging Platform (UMP) collects your ad consent choices. Google Mobile Ads SDK may collect Advertising ID (AD_ID), approximate IP-based region, diagnostics, and ad interaction telemetry in accordance with Google's Privacy Policy."
                 )
 
                 PolicySection(
                     title = "5. Local Wi-Fi File Portal",
                     body = "Wi-Fi sharing starts a temporary HTTP server confined strictly to your local Wi-Fi network (LAN) and blocked from accessing private Vault or system directories."
                 )
+
+                Spacer(modifier = Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = {
+                        try {
+                            uriHandler.openUri(BuildConfig.PRIVACY_POLICY_URL)
+                        } catch (_: Exception) {
+                            // No browser available
+                        }
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("btn_open_https_privacy_policy")
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                        contentDescription = null,
+                        tint = NeonCyan,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Open Full Privacy Policy (HTTPS)",
+                        color = NeonCyan,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
         },
         dismissButton = if (onManagePrivacyOptions != null) {
