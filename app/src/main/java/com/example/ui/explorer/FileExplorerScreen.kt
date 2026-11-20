@@ -46,9 +46,11 @@ import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.InstallMobile
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
@@ -97,14 +99,24 @@ import com.example.data.model.SortBy
 import com.example.data.model.SortOrder
 import com.example.data.model.ViewMode
 import com.example.ui.components.GlassCard
+import com.example.ui.components.LiquidSquircleBadge
+import com.example.ui.theme.AmberGold
+import com.example.ui.theme.ApksGradient
+import com.example.ui.theme.AudioGradient
+import com.example.ui.theme.DeepEmerald
+import com.example.ui.theme.DocumentsGradient
+import com.example.ui.theme.DownloadsGradient
 import com.example.ui.theme.ElectricBlue
 import com.example.ui.theme.ElectricPurple
+import com.example.ui.theme.FilesGradient
 import com.example.ui.theme.GlassBorderSubtle
+import com.example.ui.theme.ImagesGradient
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.SunsetPink
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.VideosGradient
 import com.example.ui.theme.VoidBlack
 import java.io.File
 
@@ -785,15 +797,16 @@ private fun FileListItem(
     onLongClick: () -> Unit,
     onMoreClick: () -> Unit
 ) {
-    val (icon, iconColor) = getIconForFile(file)
+    val (icon, gradient, accentColor) = getCategoryVisuals(file)
 
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .height(68.dp),
-        cornerRadius = 18.dp,
-        borderBrush = if (isSelected) Brush.linearGradient(listOf(NeonCyan, ElectricPurple)) else SolidColor(GlassBorderSubtle),
-        backgroundColor = if (isSelected) Color(0x2800E5FF) else Color(0x1A101624),
+            .height(72.dp),
+        cornerRadius = 20.dp,
+        accentGlowColor = if (isSelected) NeonCyan else accentColor,
+        borderBrush = if (isSelected) Brush.linearGradient(listOf(NeonCyan, ElectricPurple)) else null,
+        backgroundColor = if (isSelected) Color(0x3500E5FF) else null,
         onClick = onClick
     ) {
         Row(
@@ -818,22 +831,16 @@ private fun FileListItem(
                 Spacer(modifier = Modifier.width(10.dp))
             }
 
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(iconColor.copy(alpha = 0.16f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = file.name,
-                    tint = iconColor,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
+            LiquidSquircleBadge(
+                icon = icon,
+                gradient = gradient,
+                contentDescription = file.name,
+                size = 44.dp,
+                iconSize = 22.dp,
+                cornerRadius = 14.dp
+            )
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -876,14 +883,14 @@ private fun FileGridItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    val (icon, iconColor) = getIconForFile(file)
+    val (icon, gradient, accentColor) = getCategoryVisuals(file)
 
     GlassCard(
-        modifier = Modifier
-            .height(115.dp),
-        cornerRadius = 20.dp,
-        borderBrush = if (isSelected) Brush.linearGradient(listOf(NeonCyan, ElectricPurple)) else SolidColor(GlassBorderSubtle),
-        backgroundColor = if (isSelected) Color(0x2800E5FF) else Color(0x1A101624),
+        modifier = Modifier.height(128.dp),
+        cornerRadius = 22.dp,
+        accentGlowColor = if (isSelected) NeonCyan else accentColor,
+        borderBrush = if (isSelected) Brush.linearGradient(listOf(NeonCyan, ElectricPurple)) else null,
+        backgroundColor = if (isSelected) Color(0x3500E5FF) else null,
         onClick = onClick
     ) {
         Column(
@@ -893,25 +900,19 @@ private fun FileGridItem(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(46.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(iconColor.copy(alpha = 0.16f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = file.name,
-                    tint = iconColor,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
+            LiquidSquircleBadge(
+                icon = icon,
+                gradient = gradient,
+                contentDescription = file.name,
+                size = 50.dp,
+                iconSize = 24.dp,
+                cornerRadius = 16.dp
+            )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = file.name,
                 color = TextPrimary,
-                fontSize = 11.5.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1
             )
@@ -919,7 +920,7 @@ private fun FileGridItem(
             Text(
                 text = if (file.isDirectory) "${file.itemCount} items" else file.formattedSize,
                 color = TextMuted,
-                fontSize = 9.5.sp
+                fontSize = 10.sp
             )
         }
     }
@@ -944,14 +945,16 @@ private fun ActionButtonMini(
     }
 }
 
-private fun getIconForFile(file: FileItem): Pair<ImageVector, Color> {
-    if (file.isDirectory) return Icons.Filled.Folder to NeonCyan
+private fun getCategoryVisuals(file: FileItem): Triple<ImageVector, List<Color>, Color> {
+    if (file.isDirectory) return Triple(Icons.Filled.Folder, FilesGradient, NeonCyan)
     return when (file.category) {
-        FileCategory.IMAGES -> Icons.Filled.Image to SunsetPink
-        FileCategory.VIDEOS -> Icons.Filled.Videocam to ElectricPurple
-        FileCategory.AUDIO -> Icons.Filled.MusicNote to NeonCyan
-        FileCategory.DOCUMENTS -> Icons.Filled.Description to ElectricBlue
-        FileCategory.ARCHIVES -> Icons.Filled.Archive to Color(0xFFFFB300)
-        else -> Icons.Filled.Description to Color(0xFF94A3B8)
+        FileCategory.IMAGES -> Triple(Icons.Filled.Image, ImagesGradient, SunsetPink)
+        FileCategory.VIDEOS -> Triple(Icons.Filled.Videocam, VideosGradient, ElectricPurple)
+        FileCategory.AUDIO -> Triple(Icons.Filled.MusicNote, AudioGradient, SunsetPink)
+        FileCategory.DOCUMENTS -> Triple(Icons.Filled.Description, DocumentsGradient, ElectricBlue)
+        FileCategory.ARCHIVES -> Triple(Icons.Filled.Archive, listOf(Color(0xFFFFB300), Color(0xFFFF8F00)), AmberGold)
+        FileCategory.DOWNLOADS -> Triple(Icons.Filled.FileDownload, DownloadsGradient, AmberGold)
+        FileCategory.APKS -> Triple(Icons.Filled.InstallMobile, ApksGradient, DeepEmerald)
+        else -> Triple(Icons.Filled.Description, listOf(Color(0xFF64748B), Color(0xFF475569)), Color(0xFF94A3B8))
     }
 }

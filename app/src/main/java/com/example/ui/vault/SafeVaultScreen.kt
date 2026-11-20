@@ -59,9 +59,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.SolidColor
 import com.example.data.db.VaultEntity
 import com.example.data.model.FileItem
 import com.example.ui.components.GlassCard
+import com.example.ui.components.LiquidSquircleBadge
 import com.example.ui.theme.CyanPurpleGradient
 import com.example.ui.theme.DeepEmerald
 import com.example.ui.theme.ElectricBlue
@@ -74,6 +82,7 @@ import com.example.ui.theme.LightTextSecondary
 import com.example.ui.theme.LocalIsDarkTheme
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.SunsetPink
+import com.example.ui.theme.VaultGradient
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
@@ -821,13 +830,41 @@ private fun KeypadCircleButton(
     onClick: () -> Unit
 ) {
     val isDark = LocalIsDarkTheme.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.90f else 1.0f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f),
+        label = "keypad_press_scale"
+    )
+
     Box(
         modifier = Modifier
             .size(68.dp)
+            .scale(scale)
+            .shadow(
+                elevation = if (isPressed) 2.dp else 6.dp,
+                shape = CircleShape,
+                spotColor = NeonCyan.copy(alpha = 0.20f)
+            )
             .clip(CircleShape)
-            .background(if (isDark) Color(0x18FFFFFF) else Color(0x12000000))
-            .border(1.dp, GlassBorderSubtle, CircleShape)
-            .clickable(onClick = onClick),
+            .background(
+                if (isDark) {
+                    if (isPressed) Color(0x3500E5FF) else Color(0x1E142436)
+                } else {
+                    if (isPressed) Color(0x3000E5FF) else Color(0x14000000)
+                }
+            )
+            .border(
+                1.2.dp,
+                if (isPressed) SolidColor(NeonCyan) else GlassIridescentBorder,
+                CircleShape
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
         contentAlignment = Alignment.Center
     ) {
         content()
@@ -847,9 +884,10 @@ private fun VaultItemRow(
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .height(72.dp),
-        cornerRadius = 18.dp,
-        backgroundColor = if (isDark) Color(0x18101624) else Color(0xEAFFFFFF),
+            .height(74.dp),
+        cornerRadius = 20.dp,
+        accentGlowColor = NeonCyan,
+        backgroundColor = if (isDark) Color(0x2500E5FF) else Color(0xEAFFFFFF),
         onClick = onClick
     ) {
         Row(
@@ -863,15 +901,14 @@ private fun VaultItemRow(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f).padding(end = 8.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0x3300E5FF)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Filled.Lock, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(20.dp))
-                }
+                LiquidSquircleBadge(
+                    icon = Icons.Filled.Lock,
+                    gradient = VaultGradient,
+                    contentDescription = null,
+                    size = 44.dp,
+                    iconSize = 22.dp,
+                    cornerRadius = 14.dp
+                )
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(

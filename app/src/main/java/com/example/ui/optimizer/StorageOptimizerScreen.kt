@@ -65,6 +65,7 @@ import com.example.data.db.TrashEntity
 import com.example.data.model.FileItem
 import com.example.data.repository.FileManagerRepository
 import com.example.ui.components.GlassCard
+import com.example.ui.components.LiquidSquircleBadge
 import com.example.ui.theme.CyanPurpleGradient
 import com.example.ui.theme.DeepEmerald
 import com.example.ui.theme.ElectricBlue
@@ -594,8 +595,9 @@ private fun JunkItemCard(
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .height(66.dp),
-        cornerRadius = 18.dp
+            .height(70.dp),
+        cornerRadius = 20.dp,
+        accentGlowColor = iconColor
     ) {
         Row(
             modifier = Modifier
@@ -605,18 +607,17 @@ private fun JunkItemCard(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(iconColor.copy(alpha = 0.16f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(imageVector = icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(20.dp))
-                }
+                LiquidSquircleBadge(
+                    icon = icon,
+                    gradient = listOf(iconColor, iconColor.copy(alpha = 0.7f)),
+                    contentDescription = null,
+                    size = 42.dp,
+                    iconSize = 22.dp,
+                    cornerRadius = 14.dp
+                )
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
-                    Text(text = title, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(text = title, color = TextPrimary, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
                     Text(text = subtitle, color = TextMuted, fontSize = 11.sp)
                 }
             }

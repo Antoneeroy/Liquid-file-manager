@@ -60,12 +60,29 @@ import com.example.data.model.FileItem
 import com.example.data.model.RamStats
 import com.example.data.model.StorageStats
 import com.example.ui.components.GlassCard
+import com.example.ui.components.LiquidPageIndicator
 import com.example.ui.components.LiquidRamCard
+import com.example.ui.components.LiquidSquircleBadge
 import com.example.ui.components.LiquidStorageRing
+import com.example.ui.theme.ApksCardTint
+import com.example.ui.theme.ApksGradient
+import com.example.ui.theme.AudioCardTint
+import com.example.ui.theme.AudioGradient
 import com.example.ui.theme.DeepEmerald
+import com.example.ui.theme.DocumentsCardTint
+import com.example.ui.theme.DocumentsGradient
+import com.example.ui.theme.DownloadsCardTint
+import com.example.ui.theme.DownloadsGradient
+import com.example.ui.theme.DriveCardTint
+import com.example.ui.theme.DriveGradient
 import com.example.ui.theme.ElectricBlue
 import com.example.ui.theme.ElectricPurple
+import com.example.ui.theme.FilesCardTint
+import com.example.ui.theme.FilesGradient
 import com.example.ui.theme.GlassBorderSubtle
+import com.example.ui.theme.ImagesCardTint
+import com.example.ui.theme.ImagesGradient
+import com.example.ui.theme.LightGlassCardBg
 import com.example.ui.theme.LightTextMuted
 import com.example.ui.theme.LightTextPrimary
 import com.example.ui.theme.LightTextSecondary
@@ -75,6 +92,10 @@ import com.example.ui.theme.SunsetPink
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.VaultCardTint
+import com.example.ui.theme.VaultGradient
+import com.example.ui.theme.VideosCardTint
+import com.example.ui.theme.VideosGradient
 
 @Composable
 fun DashboardScreen(
@@ -290,8 +311,7 @@ fun DashboardScreen(
                                 modifier = Modifier.weight(1f),
                                 name = "Images",
                                 icon = Icons.Filled.Image,
-                                iconTint = SunsetPink,
-                                iconBg = Color(0x33FF2A85),
+                                gradient = ImagesGradient,
                                 testTag = "category_images",
                                 onClick = { onCategoryClick(FileCategory.IMAGES) }
                             )
@@ -299,8 +319,7 @@ fun DashboardScreen(
                                 modifier = Modifier.weight(1f),
                                 name = "Videos",
                                 icon = Icons.Filled.Videocam,
-                                iconTint = ElectricPurple,
-                                iconBg = Color(0x337C4DFF),
+                                gradient = VideosGradient,
                                 testTag = "category_videos",
                                 onClick = { onCategoryClick(FileCategory.VIDEOS) }
                             )
@@ -314,8 +333,7 @@ fun DashboardScreen(
                                 modifier = Modifier.weight(1f),
                                 name = "Archives",
                                 icon = Icons.Filled.Archive,
-                                iconTint = Color(0xFFFFB300),
-                                iconBg = Color(0x33FFB300),
+                                gradient = listOf(Color(0xFFFFB300), Color(0xFFFF8F00)),
                                 testTag = "category_archives",
                                 onClick = { onCategoryClick(FileCategory.ARCHIVES) }
                             )
@@ -323,8 +341,7 @@ fun DashboardScreen(
                                 modifier = Modifier.weight(1f),
                                 name = "Audio",
                                 icon = Icons.Filled.MusicNote,
-                                iconTint = NeonCyan,
-                                iconBg = Color(0x3300E5FF),
+                                gradient = AudioGradient,
                                 testTag = "category_audio",
                                 onClick = { onCategoryClick(FileCategory.AUDIO) }
                             )
@@ -346,9 +363,10 @@ fun DashboardScreen(
                     GlassCard(
                         modifier = Modifier
                             .weight(1f)
-                            .height(84.dp)
+                            .height(86.dp)
                             .testTag("card_documents"),
                         cornerRadius = 24.dp,
+                        accentGlowColor = ElectricPurple,
                         onClick = { onCategoryClick(FileCategory.DOCUMENTS) }
                     ) {
                         Row(
@@ -357,21 +375,15 @@ fun DashboardScreen(
                                 .padding(horizontal = 14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(Color(0x287C4DFF)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Description,
-                                    contentDescription = "Documents",
-                                    tint = ElectricPurple,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
+                            LiquidSquircleBadge(
+                                icon = Icons.Filled.Description,
+                                gradient = DocumentsGradient,
+                                contentDescription = "Documents",
+                                size = 44.dp,
+                                iconSize = 22.dp,
+                                cornerRadius = 14.dp
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
                                     text = "Documents",
@@ -390,12 +402,14 @@ fun DashboardScreen(
                     }
 
                     // Safe Vault Card
+                    val vaultSize = storageStats.categorySizes[FileCategory.OTHER]?.let { FileItem.formatFileSize(it) } ?: "367 MB"
                     GlassCard(
                         modifier = Modifier
                             .weight(1.15f)
-                            .height(84.dp)
+                            .height(86.dp)
                             .testTag("card_safe_vault"),
                         cornerRadius = 24.dp,
+                        accentGlowColor = NeonCyan,
                         onClick = onVaultClick
                     ) {
                         Row(
@@ -406,21 +420,15 @@ fun DashboardScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(44.dp)
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .background(Color(0x2800E5FF)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Lock,
-                                        contentDescription = "Safe Vault",
-                                        tint = NeonCyan,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
+                                LiquidSquircleBadge(
+                                    icon = Icons.Filled.Lock,
+                                    gradient = VaultGradient,
+                                    contentDescription = "Safe Vault",
+                                    size = 44.dp,
+                                    iconSize = 22.dp,
+                                    cornerRadius = 14.dp
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
                                 Column {
                                     Text(
                                         text = "Safe Vault",
@@ -440,11 +448,26 @@ fun DashboardScreen(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
                                 contentDescription = "Open Vault",
-                                tint = if (isDark) TextMuted else LightTextMuted,
-                                modifier = Modifier.size(14.dp)
+                                tint = if (isDark) Color(0xFF8E9BAE) else LightTextMuted,
+                                modifier = Modifier.size(13.dp)
                             )
                         }
                     }
+                }
+            }
+
+            // Liquid Page Indicator (Exact match from Screenshot 1 & 3)
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    LiquidPageIndicator(
+                        pageCount = 3,
+                        currentPage = 0
+                    )
                 }
             }
         }
@@ -480,6 +503,9 @@ fun DashboardScreen(
 
         // Row 1 of 3: Images, Videos, Files
         item {
+            val imgSize = storageStats.categorySizes[FileCategory.IMAGES]?.let { FileItem.formatFileSize(it) } ?: "238 MB"
+            val vidSize = storageStats.categorySizes[FileCategory.VIDEOS]?.let { FileItem.formatFileSize(it) } ?: "55.3 MB"
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -487,25 +513,28 @@ fun DashboardScreen(
                 BigSquircleCard(
                     modifier = Modifier.weight(1f),
                     title = "Images",
-                    subtitle = "238 MB • Edit Oct",
+                    subtitle = "$imgSize • Edit Oct",
                     icon = Icons.Filled.Image,
-                    gradient = listOf(SunsetPink, Color(0xFF9C27B0)),
+                    gradient = ImagesGradient,
+                    cardTint = ImagesCardTint,
                     onClick = { onCategoryClick(FileCategory.IMAGES) }
                 )
                 BigSquircleCard(
                     modifier = Modifier.weight(1f),
                     title = "Videos",
-                    subtitle = "55.3 MB • Edit Oct",
+                    subtitle = "$vidSize • Edit Oct",
                     icon = Icons.Filled.Videocam,
-                    gradient = listOf(ElectricPurple, ElectricBlue),
+                    gradient = VideosGradient,
+                    cardTint = VideosCardTint,
                     onClick = { onCategoryClick(FileCategory.VIDEOS) }
                 )
                 BigSquircleCard(
                     modifier = Modifier.weight(1f),
                     title = "Files",
-                    subtitle = "58.0 GB • Internal",
+                    subtitle = "${storageStats.totalFormatted} • Internal",
                     icon = Icons.Filled.Folder,
-                    gradient = listOf(Color(0xFF00B0FF), Color(0xFF00E5FF)),
+                    gradient = FilesGradient,
+                    cardTint = FilesCardTint,
                     onClick = onViewAllFilesClick
                 )
             }
@@ -513,6 +542,10 @@ fun DashboardScreen(
 
         // Row 2 of 3: Audio foo..., Documents, Safe Vault
         item {
+            val audioSize = storageStats.categorySizes[FileCategory.AUDIO]?.let { FileItem.formatFileSize(it) } ?: "2.5 MB"
+            val docSize = storageStats.categorySizes[FileCategory.DOCUMENTS]?.let { FileItem.formatFileSize(it) } ?: "2.6 MB"
+            val vaultSize = storageStats.categorySizes[FileCategory.OTHER]?.let { FileItem.formatFileSize(it) } ?: "367 MB"
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -520,25 +553,28 @@ fun DashboardScreen(
                 BigSquircleCard(
                     modifier = Modifier.weight(1f),
                     title = "Audio foo...",
-                    subtitle = "2.5 MB • 08h Oct",
+                    subtitle = "$audioSize • 08h Oct",
                     icon = Icons.Filled.MusicNote,
-                    gradient = listOf(Color(0xFFFF2A85), Color(0xFFD81B60)),
+                    gradient = AudioGradient,
+                    cardTint = AudioCardTint,
                     onClick = { onCategoryClick(FileCategory.AUDIO) }
                 )
                 BigSquircleCard(
                     modifier = Modifier.weight(1f),
                     title = "Documents",
-                    subtitle = "2.6 MB • 09h Oct",
+                    subtitle = "$docSize • 09h Oct",
                     icon = Icons.Filled.Description,
-                    gradient = listOf(Color(0xFF7C4DFF), Color(0xFF536DFE)),
+                    gradient = DocumentsGradient,
+                    cardTint = DocumentsCardTint,
                     onClick = { onCategoryClick(FileCategory.DOCUMENTS) }
                 )
                 BigSquircleCard(
                     modifier = Modifier.weight(1f),
                     title = "Safe Vault",
-                    subtitle = "367 MB • 08h Oct",
+                    subtitle = "$vaultSize • 08h Oct",
                     icon = Icons.Filled.Lock,
-                    gradient = listOf(Color(0xFF00E5FF), Color(0xFF00BFA5)),
+                    gradient = VaultGradient,
+                    cardTint = VaultCardTint,
                     onClick = onVaultClick
                 )
             }
@@ -546,6 +582,9 @@ fun DashboardScreen(
 
         // Row 3 of 3: Drive Sync, Downloads, APKs & Back...
         item {
+            val downSize = storageStats.categorySizes[FileCategory.DOWNLOADS]?.let { FileItem.formatFileSize(it) } ?: "1.2 GB"
+            val apkSize = storageStats.categorySizes[FileCategory.APKS]?.let { FileItem.formatFileSize(it) } ?: "480 MB"
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -555,23 +594,26 @@ fun DashboardScreen(
                     title = "Drive Sync",
                     subtitle = "14.2 GB • 12h Oct",
                     icon = Icons.Filled.CloudSync,
-                    gradient = listOf(Color(0xFF2979FF), Color(0xFF0288D1)),
+                    gradient = DriveGradient,
+                    cardTint = DriveCardTint,
                     onClick = onWirelessClick
                 )
                 BigSquircleCard(
                     modifier = Modifier.weight(1f),
                     title = "Downloads",
-                    subtitle = "1.2 GB • 14h Oct",
+                    subtitle = "$downSize • 14h Oct",
                     icon = Icons.Filled.FileDownload,
-                    gradient = listOf(Color(0xFFFF9100), Color(0xFFFF6D00)),
+                    gradient = DownloadsGradient,
+                    cardTint = DownloadsCardTint,
                     onClick = { onCategoryClick(FileCategory.DOWNLOADS) }
                 )
                 BigSquircleCard(
                     modifier = Modifier.weight(1f),
                     title = "APKs & Back...",
-                    subtitle = "480 MB • 15h Oct",
+                    subtitle = "$apkSize • 15h Oct",
                     icon = Icons.Filled.InstallMobile,
-                    gradient = listOf(Color(0xFF00E676), Color(0xFF00C853)),
+                    gradient = ApksGradient,
+                    cardTint = ApksCardTint,
                     onClick = { onCategoryClick(FileCategory.APKS) }
                 )
             }
@@ -618,8 +660,7 @@ private fun CategorySquareMini(
     modifier: Modifier = Modifier,
     name: String,
     icon: ImageVector,
-    iconTint: Color,
-    iconBg: Color,
+    gradient: List<Color>,
     testTag: String,
     onClick: () -> Unit
 ) {
@@ -629,29 +670,24 @@ private fun CategorySquareMini(
             .height(98.dp)
             .testTag(testTag),
         cornerRadius = 22.dp,
+        accentGlowColor = gradient.first(),
         onClick = onClick
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(10.dp),
+                .padding(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(iconBg),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = name,
-                    tint = iconTint,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+            LiquidSquircleBadge(
+                icon = icon,
+                gradient = gradient,
+                contentDescription = name,
+                size = 40.dp,
+                iconSize = 20.dp,
+                cornerRadius = 13.dp
+            )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = name,
@@ -670,58 +706,45 @@ private fun BigSquircleCard(
     subtitle: String,
     icon: ImageVector,
     gradient: List<Color>,
+    cardTint: Color? = null,
     onClick: () -> Unit
 ) {
     val isDark = LocalIsDarkTheme.current
-    Box(
-        modifier = modifier
-            .height(132.dp)
-            .clip(RoundedCornerShape(26.dp))
-            .background(if (isDark) Color(0x35121724) else Color(0xEEFFFFFF))
-            .border(
-                1.dp,
-                if (isDark) {
-                    Brush.linearGradient(listOf(Color(0x33FFFFFF), Color(0x10FFFFFF)))
-                } else {
-                    Brush.linearGradient(listOf(Color(0x1A000000), Color(0x0A000000)))
-                },
-                RoundedCornerShape(26.dp)
-            )
-            .clickable(onClick = onClick)
-            .padding(10.dp),
-        contentAlignment = Alignment.Center
+    GlassCard(
+        modifier = modifier.height(136.dp),
+        cornerRadius = 26.dp,
+        accentGlowColor = gradient.first(),
+        backgroundColor = if (isDark) cardTint else LightGlassCardBg,
+        onClick = onClick
     ) {
         Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 6.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(54.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(Brush.linearGradient(gradient)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = title,
-                    tint = Color.White,
-                    modifier = Modifier.size(26.dp)
-                )
-            }
+            LiquidSquircleBadge(
+                icon = icon,
+                gradient = gradient,
+                contentDescription = title,
+                size = 54.dp,
+                iconSize = 26.dp,
+                cornerRadius = 18.dp
+            )
             Spacer(modifier = Modifier.height(10.dp))
             Text(
                 text = title,
                 color = if (isDark) TextPrimary else LightTextPrimary,
-                fontSize = 12.5.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = subtitle,
-                color = if (isDark) TextMuted else LightTextMuted,
-                fontSize = 9.5.sp,
+                color = if (isDark) Color(0xFF8E9BAE) else LightTextSecondary,
+                fontSize = 10.sp,
                 maxLines = 1
             )
         }
@@ -734,11 +757,23 @@ private fun RecentFileItemRow(
     onClick: () -> Unit
 ) {
     val isDark = LocalIsDarkTheme.current
+    val (icon, gradient) = when (file.category) {
+        FileCategory.IMAGES -> Icons.Filled.Image to ImagesGradient
+        FileCategory.VIDEOS -> Icons.Filled.Videocam to VideosGradient
+        FileCategory.AUDIO -> Icons.Filled.MusicNote to AudioGradient
+        FileCategory.DOCUMENTS -> Icons.Filled.Description to DocumentsGradient
+        FileCategory.ARCHIVES -> Icons.Filled.Archive to listOf(Color(0xFFFFB300), Color(0xFFFF8F00))
+        FileCategory.DOWNLOADS -> Icons.Filled.FileDownload to DownloadsGradient
+        FileCategory.APKS -> Icons.Filled.InstallMobile to ApksGradient
+        else -> Icons.Filled.Folder to FilesGradient
+    }
+
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .height(66.dp),
-        cornerRadius = 18.dp,
+            .height(68.dp),
+        cornerRadius = 20.dp,
+        accentGlowColor = gradient.first(),
         onClick = onClick
     ) {
         Row(
@@ -747,29 +782,14 @@ private fun RecentFileItemRow(
                 .padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            val (icon, iconColor) = when (file.category) {
-                FileCategory.IMAGES -> Icons.Filled.Image to SunsetPink
-                FileCategory.VIDEOS -> Icons.Filled.Videocam to ElectricPurple
-                FileCategory.AUDIO -> Icons.Filled.MusicNote to NeonCyan
-                FileCategory.DOCUMENTS -> Icons.Filled.Description to ElectricBlue
-                FileCategory.ARCHIVES -> Icons.Filled.Archive to Color(0xFFFFB300)
-                else -> Icons.Filled.Folder to NeonCyan
-            }
-
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(iconColor.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = file.name,
-                    tint = iconColor,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+            LiquidSquircleBadge(
+                icon = icon,
+                gradient = gradient,
+                contentDescription = file.name,
+                size = 42.dp,
+                iconSize = 20.dp,
+                cornerRadius = 13.dp
+            )
 
             Spacer(modifier = Modifier.width(14.dp))
 
@@ -777,7 +797,7 @@ private fun RecentFileItemRow(
                 Text(
                     text = file.name,
                     color = if (isDark) TextPrimary else LightTextPrimary,
-                    fontSize = 13.sp,
+                    fontSize = 13.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1
                 )

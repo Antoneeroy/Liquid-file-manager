@@ -61,9 +61,31 @@ val EmeraldCyanGradient = Brush.linearGradient(
 
 val GlassIridescentBorder = Brush.linearGradient(
     colors = listOf(
-        Color(0x3500E5FF),
+        Color(0x38FFFFFF),
+        Color(0x3000E5FF),
         Color(0x257C4DFF),
-        Color(0x20FFFFFF),
-        Color(0x1000E5FF)
+        Color(0x12FFFFFF)
     )
 )
+
+// 3D Category Floating Squircle Gradients
+val ImagesGradient = listOf(Color(0xFFFF3366), Color(0xFFFF5E62))
+val VideosGradient = listOf(Color(0xFF7F00FF), Color(0xFF9F55FF))
+val FilesGradient = listOf(Color(0xFF00C6FF), Color(0xFF0072FF))
+val AudioGradient = listOf(Color(0xFFFF0844), Color(0xFFFF4B2B))
+val DocumentsGradient = listOf(Color(0xFF667EEA), Color(0xFF764BA2))
+val VaultGradient = listOf(Color(0xFF00F2FE), Color(0xFF00E5FF))
+val DriveGradient = listOf(Color(0xFF0EA5E9), Color(0xFF2563EB))
+val DownloadsGradient = listOf(Color(0xFFFF8A00), Color(0xFFFF5400))
+val ApksGradient = listOf(Color(0xFF10B981), Color(0xFF059669))
+
+// Atmospheric Deep Obsidian Card Background Tints
+val ImagesCardTint = Color(0x55201026)
+val VideosCardTint = Color(0x55161430)
+val FilesCardTint = Color(0x550F2030)
+val AudioCardTint = Color(0x5522101E)
+val DocumentsCardTint = Color(0x55181632)
+val VaultCardTint = Color(0x550E242A)
+val DriveCardTint = Color(0x550F1D30)
+val DownloadsCardTint = Color(0x55261A12)
+val ApksCardTint = Color(0x550E261D)
