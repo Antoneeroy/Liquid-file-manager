@@ -12,7 +12,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -60,29 +61,24 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.RamStats
 import com.example.ui.theme.DeepEmerald
 import com.example.ui.theme.ElectricPurple
-import com.example.ui.theme.GlassBorderHighlight
-import com.example.ui.theme.GlassBorderSubtle
 import com.example.ui.theme.GlassCardBackground
 import com.example.ui.theme.GlassIridescentBorder
 import com.example.ui.theme.LightFrostBg
 import com.example.ui.theme.LightGlassBorderSubtle
 import com.example.ui.theme.LightGlassCardBg
-import com.example.ui.theme.LightTextMuted
 import com.example.ui.theme.LightTextPrimary
 import com.example.ui.theme.LightTextSecondary
 import com.example.ui.theme.LocalIsDarkTheme
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.SunsetPink
-import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
-import com.example.ui.theme.VoidBlack
 import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Ambient Animated Mesh Background with multi-stop neon glows (Cyan, Electric Purple, Emerald)
- * that drift continuously across the deep obsidian canvas.
+ * Ambient Animated Mesh Background tuned for Android 8+ 60fps performance:
+ * caches brushes and color arrays while gently animating bloom coordinates.
  */
 @Composable
 fun AmbientMeshBackground(
@@ -95,105 +91,117 @@ fun AmbientMeshBackground(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(28000, easing = LinearEasing),
+            animation = tween(32000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "anim_glow1"
     )
 
     val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 0.90f,
-        targetValue = 1.15f,
+        initialValue = 0.92f,
+        targetValue = 1.12f,
         animationSpec = infiniteRepeatable(
-            animation = tween(9000, easing = FastOutSlowInEasing),
+            animation = tween(10000, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "pulse_scale"
     )
 
+    val bgBrush = remember(isDark) {
+        if (isDark) {
+            Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xFF06080F),
+                    Color(0xFF0A0E1A),
+                    Color(0xFF07090E)
+                )
+            )
+        } else {
+            Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xFFF8FAFC),
+                    Color(0xFFEEF2F6),
+                    LightFrostBg
+                )
+            )
+        }
+    }
+
+    val cyanColors = remember(isDark) {
+        val mult = if (isDark) 1.0f else 0.42f
+        listOf(
+            NeonCyan.copy(alpha = 0.17f * mult),
+            NeonCyan.copy(alpha = 0.04f * mult),
+            Color.Transparent
+        )
+    }
+
+    val purpleColors = remember(isDark) {
+        val mult = if (isDark) 1.0f else 0.42f
+        listOf(
+            ElectricPurple.copy(alpha = 0.19f * mult),
+            ElectricPurple.copy(alpha = 0.04f * mult),
+            Color.Transparent
+        )
+    }
+
+    val emeraldColors = remember(isDark) {
+        val mult = if (isDark) 1.0f else 0.42f
+        listOf(
+            DeepEmerald.copy(alpha = 0.13f * mult),
+            DeepEmerald.copy(alpha = 0.03f * mult),
+            Color.Transparent
+        )
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(
-                if (isDark) {
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFF06080F),
-                            Color(0xFF0A0E1A),
-                            Color(0xFF07090E)
-                        )
-                    )
-                } else {
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFFF8FAFC),
-                            Color(0xFFEEF2F6),
-                            LightFrostBg
-                        )
-                    )
-                }
-            )
+            .background(bgBrush)
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val width = size.width
             val height = size.height
 
             val rad1 = Math.toRadians(animOffset1.toDouble())
-            val x1 = (width * 0.22f + cos(rad1) * 70f).toFloat()
-            val y1 = (height * 0.20f + sin(rad1) * 80f).toFloat()
+            val x1 = (width * 0.22f + cos(rad1) * 60f).toFloat()
+            val y1 = (height * 0.20f + sin(rad1) * 70f).toFloat()
 
             val rad2 = Math.toRadians((animOffset1 + 135).toDouble())
-            val x2 = (width * 0.85f + cos(rad2) * 85f).toFloat()
-            val y2 = (height * 0.42f + sin(rad2) * 70f).toFloat()
+            val x2 = (width * 0.85f + cos(rad2) * 75f).toFloat()
+            val y2 = (height * 0.42f + sin(rad2) * 60f).toFloat()
 
             val rad3 = Math.toRadians((animOffset1 + 250).toDouble())
-            val x3 = (width * 0.40f + cos(rad3) * 60f).toFloat()
-            val y3 = (height * 0.75f + sin(rad3) * 85f).toFloat()
+            val x3 = (width * 0.40f + cos(rad3) * 55f).toFloat()
+            val y3 = (height * 0.75f + sin(rad3) * 75f).toFloat()
 
-            val alphaMultiplier = if (isDark) 1.0f else 0.45f
-
-            // Mesh glow 1: Neon Cyan bloom (top-left)
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(
-                        NeonCyan.copy(alpha = 0.18f * alphaMultiplier),
-                        NeonCyan.copy(alpha = 0.05f * alphaMultiplier),
-                        Color.Transparent
-                    ),
+                    colors = cyanColors,
                     center = Offset(x1, y1),
-                    radius = (width * 0.70f) * pulseScale
+                    radius = (width * 0.68f) * pulseScale
                 ),
-                radius = (width * 0.70f) * pulseScale,
+                radius = (width * 0.68f) * pulseScale,
                 center = Offset(x1, y1)
             )
 
-            // Mesh glow 2: Electric Purple bloom (mid-right)
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(
-                        ElectricPurple.copy(alpha = 0.20f * alphaMultiplier),
-                        ElectricPurple.copy(alpha = 0.05f * alphaMultiplier),
-                        Color.Transparent
-                    ),
+                    colors = purpleColors,
                     center = Offset(x2, y2),
-                    radius = (width * 0.78f) * (2f - pulseScale)
+                    radius = (width * 0.74f) * (2f - pulseScale)
                 ),
-                radius = (width * 0.78f) * (2f - pulseScale),
+                radius = (width * 0.74f) * (2f - pulseScale),
                 center = Offset(x2, y2)
             )
 
-            // Mesh glow 3: Deep Emerald bloom (bottom-center)
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(
-                        DeepEmerald.copy(alpha = 0.14f * alphaMultiplier),
-                        DeepEmerald.copy(alpha = 0.03f * alphaMultiplier),
-                        Color.Transparent
-                    ),
+                    colors = emeraldColors,
                     center = Offset(x3, y3),
-                    radius = width * 0.60f
+                    radius = width * 0.58f
                 ),
-                radius = width * 0.60f,
+                radius = width * 0.58f,
                 center = Offset(x3, y3)
             )
         }
@@ -203,13 +211,9 @@ fun AmbientMeshBackground(
 }
 
 /**
- * Premium Liquid Glass Card with:
- * - Realistic multi-layer frosted transparency
- * - Specular top glare & gloss reflection
- * - Iridescent 1px crystalline refraction border
- * - Interactive spring scale physics on press
- * - Optional atmospheric colored ambient glow
+ * High-performance Liquid Glass Card with cached shapes/brushes for 60fps scrolling.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
@@ -220,115 +224,125 @@ fun GlassCard(
     borderWidth: Dp = 1.dp,
     specularHighlight: Boolean = true,
     onClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
     val isDark = LocalIsDarkTheme.current
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
-    // Smooth tactile spring scale on press
     val scale by animateFloatAsState(
-        targetValue = if (isPressed && onClick != null) 0.975f else 1.0f,
+        targetValue = if (isPressed && (onClick != null || onLongClick != null)) 0.975f else 1.0f,
         animationSpec = spring(dampingRatio = 0.65f, stiffness = 450f),
         label = "glass_press_scale"
     )
 
-    val shape = RoundedCornerShape(cornerRadius)
+    val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
 
-    val resolvedBg = backgroundColor ?: if (isDark) {
-        if (accentGlowColor != null) {
-            Color(0x75121828)
+    val resolvedBg = remember(backgroundColor, isDark, accentGlowColor) {
+        backgroundColor ?: if (isDark) {
+            if (accentGlowColor != null) Color(0x75121828) else GlassCardBackground
         } else {
-            GlassCardBackground
+            LightGlassCardBg
         }
-    } else {
-        LightGlassCardBg
     }
 
-    val resolvedBorder = borderBrush ?: if (isDark) {
-        if (accentGlowColor != null) {
-            Brush.linearGradient(
-                colors = listOf(
-                    Color.White.copy(alpha = 0.30f),
-                    accentGlowColor.copy(alpha = 0.35f),
-                    Color.White.copy(alpha = 0.10f),
-                    accentGlowColor.copy(alpha = 0.05f)
+    val resolvedBorder = remember(borderBrush, isDark, accentGlowColor) {
+        borderBrush ?: if (isDark) {
+            if (accentGlowColor != null) {
+                Brush.linearGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.28f),
+                        accentGlowColor.copy(alpha = 0.34f),
+                        Color.White.copy(alpha = 0.10f),
+                        accentGlowColor.copy(alpha = 0.05f)
+                    )
                 )
-            )
+            } else {
+                GlassIridescentBorder
+            }
         } else {
-            GlassIridescentBorder
+            SolidColor(LightGlassBorderSubtle)
         }
-    } else {
-        SolidColor(LightGlassBorderSubtle)
     }
 
-    val clickModifier = if (onClick != null) {
-        Modifier.clickable(
+    val topGlareColors = remember(isDark) {
+        listOf(
+            Color.White.copy(alpha = if (isDark) 0.09f else 0.35f),
+            Color.White.copy(alpha = if (isDark) 0.02f else 0.10f),
+            Color.Transparent
+        )
+    }
+
+    val hairlineBrush = remember(isDark) {
+        Brush.horizontalGradient(
+            colors = listOf(
+                Color.Transparent,
+                Color.White.copy(alpha = if (isDark) 0.38f else 0.58f),
+                Color.Transparent
+            )
+        )
+    }
+
+    val accentColors = remember(accentGlowColor) {
+        accentGlowColor?.let { listOf(it.copy(alpha = 0.08f), Color.Transparent) }
+    }
+
+    val clickModifier = if (onClick != null || onLongClick != null) {
+        Modifier.combinedClickable(
             interactionSource = interactionSource,
             indication = null,
-            onClick = onClick
+            onClick = { onClick?.invoke() },
+            onLongClick = onLongClick
         )
     } else Modifier
 
-    val shadowSpotColor = (accentGlowColor ?: NeonCyan).copy(alpha = if (isDark) 0.16f else 0.08f)
+    val shadowSpotColor = remember(accentGlowColor, isDark) {
+        (accentGlowColor ?: NeonCyan).copy(alpha = if (isDark) 0.15f else 0.08f)
+    }
 
     Box(
         modifier = modifier
             .scale(scale)
             .shadow(
-                elevation = if (isDark) 8.dp else 4.dp,
+                elevation = if (isDark) 6.dp else 3.dp,
                 shape = shape,
                 spotColor = shadowSpotColor,
-                ambientColor = Color.Black.copy(alpha = if (isDark) 0.5f else 0.15f)
+                ambientColor = Color.Black.copy(alpha = if (isDark) 0.45f else 0.12f)
             )
             .clip(shape)
             .background(resolvedBg)
             .drawBehind {
+                val radiusPx = cornerRadius.toPx()
                 if (specularHighlight) {
-                    // Top Specular Optical Glare: realistic convex light reflection on top 38% of card
                     val highlightHeight = size.height * 0.38f
                     drawRoundRect(
                         brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = if (isDark) 0.09f else 0.35f),
-                                Color.White.copy(alpha = if (isDark) 0.02f else 0.10f),
-                                Color.Transparent
-                            ),
+                            colors = topGlareColors,
                             startY = 0f,
                             endY = highlightHeight
                         ),
                         size = Size(size.width, highlightHeight),
-                        cornerRadius = CornerRadius(cornerRadius.toPx(), cornerRadius.toPx())
+                        cornerRadius = CornerRadius(radiusPx, radiusPx)
                     )
 
-                    // Hairline Specular Reflection Line at top edge
                     drawLine(
-                        brush = Brush.horizontalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color.White.copy(alpha = if (isDark) 0.40f else 0.60f),
-                                Color.Transparent
-                            )
-                        ),
+                        brush = hairlineBrush,
                         start = Offset(size.width * 0.15f, 0.8f),
                         end = Offset(size.width * 0.85f, 0.8f),
                         strokeWidth = 1.2f
                     )
                 }
 
-                // If accent glow specified, draw subtle colored inner ambient wash
-                if (accentGlowColor != null && isDark) {
+                if (accentColors != null && isDark) {
                     drawRoundRect(
                         brush = Brush.radialGradient(
-                            colors = listOf(
-                                accentGlowColor.copy(alpha = 0.08f),
-                                Color.Transparent
-                            ),
+                            colors = accentColors,
                             center = Offset(size.width * 0.5f, size.height * 0.35f),
                             radius = size.maxDimension * 0.6f
                         ),
                         size = size,
-                        cornerRadius = CornerRadius(cornerRadius.toPx(), cornerRadius.toPx())
+                        cornerRadius = CornerRadius(radiusPx, radiusPx)
                     )
                 }
             }
@@ -338,13 +352,6 @@ fun GlassCard(
     )
 }
 
-/**
- * Floating 3D Squircle Icon Badge with:
- * - Rich vibrant multi-tone gradient
- * - Soft diffuse colored drop shadow / ambient glow
- * - Specular glossy top-bevel highlight
- * - Crisp centered white vector icon
- */
 @Composable
 fun LiquidSquircleBadge(
     icon: ImageVector,
@@ -356,44 +363,50 @@ fun LiquidSquircleBadge(
     cornerRadius: Dp = 18.dp
 ) {
     val primaryColor = gradient.firstOrNull() ?: NeonCyan
-    val shape = RoundedCornerShape(cornerRadius)
+    val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
+    val gradientBrush = remember(gradient) { Brush.linearGradient(gradient) }
+    val glossColors = remember {
+        listOf(
+            Color.White.copy(alpha = 0.30f),
+            Color.White.copy(alpha = 0.06f),
+            Color.Transparent
+        )
+    }
+    val edgeHighlight = remember {
+        Brush.horizontalGradient(
+            colors = listOf(
+                Color.Transparent,
+                Color.White.copy(alpha = 0.60f),
+                Color.Transparent
+            )
+        )
+    }
 
     Box(
         modifier = modifier
             .size(size)
             .shadow(
-                elevation = 10.dp,
+                elevation = 8.dp,
                 shape = shape,
-                spotColor = primaryColor.copy(alpha = 0.50f),
-                ambientColor = Color.Black.copy(alpha = 0.40f)
+                spotColor = primaryColor.copy(alpha = 0.45f),
+                ambientColor = Color.Black.copy(alpha = 0.35f)
             )
             .clip(shape)
-            .background(Brush.linearGradient(gradient))
+            .background(gradientBrush)
             .drawBehind {
-                // Top 3D glossy highlight
+                val rPx = cornerRadius.toPx()
                 drawRoundRect(
                     brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.32f),
-                            Color.White.copy(alpha = 0.06f),
-                            Color.Transparent
-                        ),
+                        colors = glossColors,
                         startY = 0f,
                         endY = this.size.height * 0.45f
                     ),
                     size = Size(this.size.width, this.size.height * 0.45f),
-                    cornerRadius = CornerRadius(cornerRadius.toPx(), cornerRadius.toPx())
+                    cornerRadius = CornerRadius(rPx, rPx)
                 )
 
-                // Ultra-fine inner top edge highlight
                 drawLine(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.White.copy(alpha = 0.65f),
-                            Color.Transparent
-                        )
-                    ),
+                    brush = edgeHighlight,
                     start = Offset(this.size.width * 0.15f, 1f),
                     end = Offset(this.size.width * 0.85f, 1f),
                     strokeWidth = 1.2f
@@ -410,10 +423,6 @@ fun LiquidSquircleBadge(
     }
 }
 
-/**
- * Page Indicator shown in Reference UI:
- * Active glowing cyan capsule pill + subtle inactive rounded dots.
- */
 @Composable
 fun LiquidPageIndicator(
     pageCount: Int = 3,
@@ -426,9 +435,7 @@ fun LiquidPageIndicator(
         verticalAlignment = Alignment.CenterVertically
     ) {
         for (i in 0 until pageCount) {
-            val isSelected = i == currentPage
-            if (isSelected) {
-                // Active Glowing Cyan Capsule Pill
+            if (i == currentPage) {
                 Box(
                     modifier = Modifier
                         .width(18.dp)
@@ -442,7 +449,6 @@ fun LiquidPageIndicator(
                         .background(NeonCyan)
                 )
             } else {
-                // Inactive Subtle Rounded Dot
                 Box(
                     modifier = Modifier
                         .size(4.5.dp)
@@ -461,7 +467,8 @@ fun LiquidRamCard(
     modifier: Modifier = Modifier
 ) {
     val isDark = LocalIsDarkTheme.current
-    val percentInt = (ramStats.usedPercentage * 100).toInt().coerceIn(1, 99)
+    val percentInt = if (ramStats.isAvailable) (ramStats.usedPercentage * 100).toInt().coerceIn(0, 100) else 0
+    val barBrush = remember { Brush.linearGradient(listOf(NeonCyan, ElectricPurple)) }
 
     GlassCard(
         modifier = modifier.fillMaxWidth(),
@@ -497,7 +504,11 @@ fun LiquidRamCard(
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "${ramStats.usedFormatted} / ${ramStats.totalFormatted} ($percentInt% used)",
+                            text = if (ramStats.isAvailable) {
+                                "${ramStats.usedFormatted} / ${ramStats.totalFormatted} ($percentInt% used)"
+                            } else {
+                                "Unavailable"
+                            },
                             color = if (isDark) TextSecondary else LightTextSecondary,
                             fontSize = 11.5.sp
                         )
@@ -507,14 +518,14 @@ fun LiquidRamCard(
                 IconButton(
                     onClick = onBoostRam,
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .background(Color(0x2400E5FF))
                         .border(1.dp, Color(0x4000E5FF), CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Bolt,
-                        contentDescription = "Boost RAM",
+                        contentDescription = "Refresh & trim memory",
                         tint = NeonCyan,
                         modifier = Modifier.size(20.dp)
                     )
@@ -523,7 +534,6 @@ fun LiquidRamCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Glowing Liquid RAM progress bar
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -531,45 +541,50 @@ fun LiquidRamCard(
                     .clip(CircleShape)
                     .background(if (isDark) Color(0x25FFFFFF) else Color(0x18000000))
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(ramStats.usedPercentage.coerceIn(0.08f, 1f))
-                        .height(8.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                listOf(NeonCyan, ElectricPurple)
-                            )
-                        )
-                )
+                if (ramStats.isAvailable) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(ramStats.usedPercentage.coerceIn(0.02f, 1f))
+                            .height(8.dp)
+                            .clip(CircleShape)
+                            .background(barBrush)
+                    )
+                }
             }
         }
     }
 }
 
-/**
- * Liquid Storage Ring: Dual-tone glowing radial progress bar matching Reference UI
- */
 @Composable
 fun LiquidStorageRing(
     progress: Float,
     usedText: String,
     totalText: String,
     modifier: Modifier = Modifier,
+    isAvailable: Boolean = true,
     size: Dp = 160.dp,
     strokeWidth: Dp = 14.dp
 ) {
     val isDark = LocalIsDarkTheme.current
     val infiniteTransition = rememberInfiniteTransition(label = "ring_glow")
     val glowPulse by infiniteTransition.animateFloat(
-        initialValue = 0.75f,
-        targetValue = 1.05f,
+        initialValue = 0.78f,
+        targetValue = 1.02f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2200, easing = FastOutSlowInEasing),
+            animation = tween(2400, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "glow_pulse"
     )
+
+    val ringSweepBrush = remember {
+        Brush.sweepGradient(
+            0.0f to NeonCyan,
+            0.45f to ElectricPurple,
+            0.75f to SunsetPink,
+            1.0f to NeonCyan
+        )
+    }
 
     Box(
         modifier = modifier.size(size),
@@ -581,7 +596,6 @@ fun LiquidStorageRing(
             val arcSize = canvasSize - strokePx
             val topLeft = Offset(strokePx / 2f, strokePx / 2f)
 
-            // Background Track with soft glass rim
             drawArc(
                 color = if (isDark) Color(0x22FFFFFF) else Color(0x18000000),
                 startAngle = -220f,
@@ -592,61 +606,54 @@ fun LiquidStorageRing(
                 style = Stroke(width = strokePx * 0.75f, cap = StrokeCap.Round)
             )
 
-            // Progress Arc with Gradient (Neon Cyan -> Electric Purple -> Sunset Pink)
-            val activeSweep = (260f * progress.coerceIn(0.05f, 1f))
-            val gradientBrush = Brush.sweepGradient(
-                0.0f to NeonCyan,
-                0.45f to ElectricPurple,
-                0.75f to SunsetPink,
-                1.0f to NeonCyan
-            )
+            if (isAvailable) {
+                val activeSweep = (260f * progress.coerceIn(0.03f, 1f))
 
-            // Ambient Glow Under Arc
-            drawArc(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        NeonCyan.copy(alpha = 0.40f * glowPulse),
-                        ElectricPurple.copy(alpha = 0.15f * glowPulse),
-                        Color.Transparent
+                drawArc(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            NeonCyan.copy(alpha = 0.36f * glowPulse),
+                            ElectricPurple.copy(alpha = 0.14f * glowPulse),
+                            Color.Transparent
+                        ),
+                        center = center,
+                        radius = canvasSize * 0.58f
                     ),
-                    center = center,
-                    radius = canvasSize * 0.58f
-                ),
-                startAngle = -220f,
-                sweepAngle = activeSweep,
-                useCenter = false,
-                topLeft = topLeft,
-                size = Size(arcSize, arcSize),
-                style = Stroke(width = strokePx * 1.8f, cap = StrokeCap.Round)
-            )
+                    startAngle = -220f,
+                    sweepAngle = activeSweep,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = Size(arcSize, arcSize),
+                    style = Stroke(width = strokePx * 1.8f, cap = StrokeCap.Round)
+                )
 
-            // Foreground Active Arc
-            drawArc(
-                brush = gradientBrush,
-                startAngle = -220f,
-                sweepAngle = activeSweep,
-                useCenter = false,
-                topLeft = topLeft,
-                size = Size(arcSize, arcSize),
-                style = Stroke(width = strokePx, cap = StrokeCap.Round)
-            )
+                drawArc(
+                    brush = ringSweepBrush,
+                    startAngle = -220f,
+                    sweepAngle = activeSweep,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = Size(arcSize, arcSize),
+                    style = Stroke(width = strokePx, cap = StrokeCap.Round)
+                )
+            }
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = usedText,
+                text = if (isAvailable) usedText else "Unavailable",
                 color = if (isDark) TextPrimary else LightTextPrimary,
-                fontSize = 21.sp,
+                fontSize = if (isAvailable) 20.sp else 14.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = (-0.5).sp
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = totalText,
+                text = if (isAvailable) totalText else "Storage info denied",
                 color = if (isDark) Color(0xFF8E9BAE) else LightTextSecondary,
-                fontSize = 11.sp,
+                fontSize = 10.5.sp,
                 fontWeight = FontWeight.Medium,
-                letterSpacing = 0.6.sp
+                letterSpacing = 0.4.sp
             )
         }
     }

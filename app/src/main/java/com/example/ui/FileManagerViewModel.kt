@@ -1,8 +1,17 @@
 package com.example.ui
 
 import android.app.Application
+import android.media.MediaMetadataRetriever
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import com.example.data.crypto.VaultSecurityManager
 import com.example.data.db.TrashEntity
 import com.example.data.db.VaultEntity
 import com.example.data.model.ClipboardAction
@@ -12,18 +21,24 @@ import com.example.data.model.FileItem
 import com.example.data.model.RamStats
 import com.example.data.model.StorageStats
 import com.example.data.repository.FileManagerRepository
+import com.example.data.server.LocalWebServer
 import com.example.ui.components.NavigationTab
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 class FileManagerViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = FileManagerRepository(application)
+    private val securityManager = VaultSecurityManager(application)
 
     // Current navigation tab
     private val _currentTab = MutableStateFlow(NavigationTab.DASHBOARD)
@@ -40,41 +55,49 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
     val showStorageBar: StateFlow<Boolean> = _showStorageBar.asStateFlow()
 
     // RAM stats
-    private val _ramStats = MutableStateFlow(repository.getRamStats())
+    private val _ramStats = MutableStateFlow(RamStats(isAvailable = false))
     val ramStats: StateFlow<RamStats> = _ramStats.asStateFlow()
 
-    // Safe Vault security settings
-    private val _vaultPin = MutableStateFlow("1234")
-    val vaultPin: StateFlow<String> = _vaultPin.asStateFlow()
+    // Safe Vault persistent security state
+    private val _isPinConfigured = MutableStateFlow(securityManager.isPinConfigured())
+    val isPinConfigured: StateFlow<Boolean> = _isPinConfigured.asStateFlow()
 
-    private val _isVaultPasswordEnabled = MutableStateFlow(true)
+    private val _isVaultPasswordEnabled = MutableStateFlow(securityManager.isPasswordProtectionEnabled())
     val isVaultPasswordEnabled: StateFlow<Boolean> = _isVaultPasswordEnabled.asStateFlow()
 
-    private val _isBiometricEnabled = MutableStateFlow(true)
+    private val _isBiometricEnabled = MutableStateFlow(securityManager.isBiometricEnabled())
     val isBiometricEnabled: StateFlow<Boolean> = _isBiometricEnabled.asStateFlow()
+
+    private val _vaultFailedAttempts = MutableStateFlow(securityManager.getFailedAttempts())
+    val vaultFailedAttempts: StateFlow<Int> = _vaultFailedAttempts.asStateFlow()
+
+    private val _vaultLockoutSeconds = MutableStateFlow(securityManager.getLockoutRemainingSeconds())
+    val vaultLockoutSeconds: StateFlow<Long> = _vaultLockoutSeconds.asStateFlow()
+
+    private val _hasRecoveryConfigured = MutableStateFlow(securityManager.hasRecoveryConfigured())
+    val hasRecoveryConfigured: StateFlow<Boolean> = _hasRecoveryConfigured.asStateFlow()
+
+    private val _recoveryQuestion = MutableStateFlow(securityManager.getRecoveryQuestion())
+    val recoveryQuestion: StateFlow<String> = _recoveryQuestion.asStateFlow()
+
+    private var sessionUnlockedPin: String? = null
+    private var lockoutTickerJob: Job? = null
 
     // Category filter in explorer
     private val _selectedCategoryFilter = MutableStateFlow<FileCategory?>(null)
     val selectedCategoryFilter: StateFlow<FileCategory?> = _selectedCategoryFilter.asStateFlow()
 
-    // Real Wi-Fi Web & File Server
-    private val localWebServer = com.example.data.server.LocalWebServer(application) { repository.rootPath }
+    // Hardened Wi-Fi HTTP File Server
+    private val localWebServer = LocalWebServer(application) { repository.rootPath }
     val isFtpRunning: StateFlow<Boolean> = localWebServer.isRunning
     val ftpServerUrl: StateFlow<String> = localWebServer.serverUrl
 
-    // Storage stats
-    private val _storageStats = MutableStateFlow(
-        StorageStats(
-            totalBytes = 256L * 1024 * 1024 * 1024,
-            usedBytes = 184_300_000_000L,
-            freeBytes = (256L * 1024 * 1024 * 1024) - 184_300_000_000L,
-            usedPercentage = 0.72f
-        )
-    )
+    // Real storage stats (unavailable until inspected on IO)
+    private val _storageStats = MutableStateFlow(StorageStats(isAvailable = false))
     val storageStats: StateFlow<StorageStats> = _storageStats.asStateFlow()
 
     // Root and Current Directory Path
-    val rootPath: String = repository.rootPath
+    val rootPath: String get() = repository.rootPath
     private val _currentPath = MutableStateFlow(repository.rootPath)
     val currentPath: StateFlow<String> = _currentPath.asStateFlow()
 
@@ -103,7 +126,7 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
         .getAllTrash()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Optimizer state
+    // Optimizer state (lazy scan instead of blocking cold boot)
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
 
@@ -120,28 +143,67 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
     private val _activeImage = MutableStateFlow<FileItem?>(null)
     val activeImage: StateFlow<FileItem?> = _activeImage.asStateFlow()
 
+    private val _imageGallery = MutableStateFlow<List<FileItem>>(emptyList())
+    val imageGallery: StateFlow<List<FileItem>> = _imageGallery.asStateFlow()
+
     private val _activeText = MutableStateFlow<FileItem?>(null)
     val activeText: StateFlow<FileItem?> = _activeText.asStateFlow()
+
+    private val _activePdf = MutableStateFlow<FileItem?>(null)
+    val activePdf: StateFlow<FileItem?> = _activePdf.asStateFlow()
 
     private val _activeVideo = MutableStateFlow<FileItem?>(null)
     val activeVideo: StateFlow<FileItem?> = _activeVideo.asStateFlow()
 
+    // Real Media3 Audio Player state
+    private var audioPlayer: ExoPlayer? = null
+    private var audioProgressJob: Job? = null
+    private var audioQueue: List<FileItem> = emptyList()
+    private var audioQueueIndex: Int = -1
+
     private val _activeAudio = MutableStateFlow<FileItem?>(null)
     val activeAudio: StateFlow<FileItem?> = _activeAudio.asStateFlow()
+
+    private val _audioTitle = MutableStateFlow<String?>(null)
+    val audioTitle: StateFlow<String?> = _audioTitle.asStateFlow()
+
+    private val _audioArtist = MutableStateFlow<String?>(null)
+    val audioArtist: StateFlow<String?> = _audioArtist.asStateFlow()
 
     private val _isAudioPlaying = MutableStateFlow(false)
     val isAudioPlaying: StateFlow<Boolean> = _isAudioPlaying.asStateFlow()
 
-    // User message (Toast / Snackbar)
+    private val _audioPositionMs = MutableStateFlow(0L)
+    val audioPositionMs: StateFlow<Long> = _audioPositionMs.asStateFlow()
+
+    private val _audioDurationMs = MutableStateFlow(0L)
+    val audioDurationMs: StateFlow<Long> = _audioDurationMs.asStateFlow()
+
+    private val _hasNextAudio = MutableStateFlow(false)
+    val hasNextAudio: StateFlow<Boolean> = _hasNextAudio.asStateFlow()
+
+    private val _hasPreviousAudio = MutableStateFlow(false)
+    val hasPreviousAudio: StateFlow<Boolean> = _hasPreviousAudio.asStateFlow()
+
+    private val _audioErrorMessage = MutableStateFlow<String?>(null)
+    val audioErrorMessage: StateFlow<String?> = _audioErrorMessage.asStateFlow()
+
+    // User message (Snackbar)
     private val _userMessage = MutableStateFlow<String?>(null)
     val userMessage: StateFlow<String?> = _userMessage.asStateFlow()
 
     init {
         refreshAll()
+        if (_vaultLockoutSeconds.value > 0L) {
+            startLockoutCountdown()
+        }
     }
 
     fun selectTab(tab: NavigationTab) {
         _currentTab.value = tab
+        if (tab == NavigationTab.TOOLS && _junkResult.value == null && !_isScanning.value) {
+            scanOptimizer(auto = true)
+        }
     }
 
     // Settings actions
@@ -162,13 +224,17 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun setBiometricEnabled(enabled: Boolean) {
+        securityManager.setBiometricEnabled(enabled)
         _isBiometricEnabled.value = enabled
-        showMessage(if (enabled) "Biometric Fingerprint unlock enabled" else "Biometric Fingerprint unlock disabled")
+        showMessage(if (enabled) "Biometric unlock enabled" else "Biometric unlock disabled")
     }
 
     fun unlockWithBiometric() {
+        securityManager.resetFailedAttempts()
+        _vaultFailedAttempts.value = 0
+        _vaultLockoutSeconds.value = 0L
         _isVaultUnlocked.value = true
-        showMessage("Biometric Authenticated! Vault Unlocked")
+        showMessage("Biometric verified. Safe Vault unlocked.")
     }
 
     fun toggleHideFile(file: FileItem) {
@@ -179,7 +245,7 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
                 showMessage(if (wasHidden) "Unhid '${file.name.removePrefix(".")}'" else "Hid as '.${file.name}'")
                 loadCurrentDirectory(_currentPath.value)
             } else {
-                showMessage("Failed to update file hidden status")
+                showMessage("Failed to update file visibility")
             }
         }
     }
@@ -190,23 +256,27 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
             for (f in files) {
                 if (repository.toggleHideFile(f)) count++
             }
-            showMessage("$count item(s) hidden/unhidden")
+            showMessage("$count item(s) updated")
             loadCurrentDirectory(_currentPath.value)
         }
     }
 
     fun boostRam() {
         viewModelScope.launch {
-            val before = repository.getRamStats()
-            System.gc()
-            delay(350)
-            val after = repository.getRamStats()
-            val freed = (after.availBytes - before.availBytes).coerceAtLeast(0L)
+            val before = withContext(Dispatchers.IO) { repository.getRamStats() }
+            withContext(Dispatchers.Default) { System.gc() }
+            delay(250)
+            val after = withContext(Dispatchers.IO) { repository.getRamStats() }
             _ramStats.value = after
+            if (!after.isAvailable) {
+                showMessage("Memory stats unavailable on this device")
+                return@launch
+            }
+            val freed = (after.availBytes - before.availBytes).coerceAtLeast(0L)
             if (freed > 0) {
-                showMessage("RAM Optimized! Reclaimed ${FileItem.formatFileSize(freed)} cache")
+                showMessage("Memory trimmed! Freed ${FileItem.formatFileSize(freed)}")
             } else {
-                showMessage("RAM Optimized! Background process memory active")
+                showMessage("Memory status refreshed (${after.availFormatted} free)")
             }
         }
     }
@@ -214,23 +284,23 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
     fun clearAppCache() {
         viewModelScope.launch {
             val freed = repository.clearAppCache()
-            showMessage("Cache cleared! Reclaimed ${FileItem.formatFileSize(freed)}")
+            showMessage("Cache cleared: reclaimed ${FileItem.formatFileSize(freed)}")
             loadStorageStats()
         }
     }
 
     fun refreshAll() {
         viewModelScope.launch {
+            // Fast path first: RAM, root listing, and basic storage stats
+            _ramStats.value = withContext(Dispatchers.IO) { repository.getRamStats() }
             loadStorageStats()
             loadCurrentDirectory(_currentPath.value)
             loadRecentFiles()
-            scanOptimizer(auto = true)
-            _ramStats.value = repository.getRamStats()
         }
     }
 
     private suspend fun loadStorageStats() {
-        _storageStats.value = repository.getStorageStats()
+        _storageStats.value = repository.getStorageStats(includeCategoryBreakdown = true)
     }
 
     fun loadCurrentDirectory(path: String) {
@@ -240,10 +310,21 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun openVolumeRoot(path: String) {
+        _selectedCategoryFilter.value = null
+        _currentTab.value = NavigationTab.EXPLORER
+        loadCurrentDirectory(path)
+    }
+
     fun navigateUp(): Boolean {
-        val current = File(_currentPath.value)
+        val currentPathVal = _currentPath.value
+        val sdRoot = repository.getAccessibleSdCardRoot()
+        if (currentPathVal == rootPath || (sdRoot != null && currentPathVal == sdRoot)) {
+            return false
+        }
+        val current = File(currentPathVal)
         val parent = current.parentFile
-        if (parent != null && _currentPath.value != rootPath && parent.canRead()) {
+        if (parent != null && parent.canRead()) {
             loadCurrentDirectory(parent.absolutePath)
             return true
         }
@@ -260,7 +341,7 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
             _currentTab.value = NavigationTab.EXPLORER
             val catFiles = repository.getFilesByCategory(category)
             _currentFiles.value = catFiles
-            showMessage("Showing ${category.label} (${catFiles.size} items)")
+            showMessage("${category.label}: ${catFiles.size} item(s)")
         }
     }
 
@@ -281,30 +362,240 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun openFile(file: FileItem) {
-        when (file.category) {
-            FileCategory.IMAGES -> _activeImage.value = file
-            FileCategory.AUDIO -> {
-                _activeAudio.value = file
-                _isAudioPlaying.value = true
-            }
-            FileCategory.VIDEOS -> _activeVideo.value = file
-            FileCategory.DOCUMENTS -> _activeText.value = file
-            else -> {
-                _activeText.value = file
+    fun openContentUri(uri: Uri) {
+        viewModelScope.launch {
+            val resolved = repository.resolveContentUriToFileItem(uri)
+            if (resolved == null) {
+                showMessage("Unable to open selected document")
+            } else {
+                openFile(resolved)
             }
         }
     }
 
-    fun closeImageViewer() { _activeImage.value = null }
-    fun closeTextViewer() { _activeText.value = null }
-    fun closeVideoViewer() { _activeVideo.value = null }
-    fun closeAudioPlayer() {
-        _activeAudio.value = null
-        _isAudioPlaying.value = false
+    fun openFile(file: FileItem) {
+        when {
+            file.isPdf -> _activePdf.value = file
+            file.category == FileCategory.IMAGES -> {
+                val gallerySource = (_currentFiles.value + _recentFiles.value)
+                    .filter { !it.isDirectory && it.category == FileCategory.IMAGES }
+                    .distinctBy { it.path }
+                _imageGallery.value = if (gallerySource.any { it.path == file.path }) gallerySource else listOf(file) + gallerySource
+                _activeImage.value = file
+            }
+            file.category == FileCategory.AUDIO -> startAudioPlayback(file)
+            file.category == FileCategory.VIDEOS -> _activeVideo.value = file
+            else -> _activeText.value = file
+        }
     }
+
+    fun closeImageViewer() {
+        _activeImage.value = null
+        repository.clearVaultPreviewCache()
+    }
+
+    fun closeTextViewer() {
+        _activeText.value = null
+        repository.clearVaultPreviewCache()
+    }
+
+    fun closePdfViewer() {
+        _activePdf.value = null
+        repository.clearVaultPreviewCache()
+    }
+
+    fun closeVideoViewer() {
+        _activeVideo.value = null
+        repository.clearVaultPreviewCache()
+    }
+
+    // --- Real Media3 ExoPlayer Audio Engine ---
+
+    private fun getOrCreateAudioPlayer(): ExoPlayer {
+        val existing = audioPlayer
+        if (existing != null) return existing
+
+        val attrs = AudioAttributes.Builder()
+            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+            .setUsage(C.USAGE_MEDIA)
+            .build()
+
+        val player = ExoPlayer.Builder(getApplication())
+            .setAudioAttributes(attrs, true)
+            .setWakeMode(C.WAKE_MODE_LOCAL)
+            .build()
+
+        player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                when (playbackState) {
+                    Player.STATE_READY -> {
+                        _audioDurationMs.value = player.duration.coerceAtLeast(0L)
+                        _audioErrorMessage.value = null
+                    }
+                    Player.STATE_ENDED -> {
+                        if (_hasNextAudio.value) {
+                            playNextAudio()
+                        } else {
+                            _isAudioPlaying.value = false
+                            _audioPositionMs.value = 0L
+                            player.seekTo(0L)
+                            player.pause()
+                        }
+                    }
+                    else -> Unit
+                }
+            }
+
+            override fun onIsPlayingChanged(playing: Boolean) {
+                _isAudioPlaying.value = playing
+                if (playing) startAudioProgressTicker() else audioProgressJob?.cancel()
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                _isAudioPlaying.value = false
+                audioProgressJob?.cancel()
+                _audioErrorMessage.value = "Unsupported or unreadable audio (${error.errorCodeName})"
+            }
+        })
+
+        audioPlayer = player
+        return player
+    }
+
+    private fun startAudioPlayback(file: FileItem) {
+        val queueCandidates = (_currentFiles.value + _recentFiles.value)
+            .filter { !it.isDirectory && it.category == FileCategory.AUDIO }
+            .distinctBy { it.path }
+
+        audioQueue = if (queueCandidates.any { it.path == file.path }) {
+            queueCandidates
+        } else {
+            listOf(file) + queueCandidates
+        }
+        audioQueueIndex = audioQueue.indexOfFirst { it.path == file.path }.coerceAtLeast(0)
+        loadAndPlayAudioAtIndex(audioQueueIndex)
+    }
+
+    private fun loadAndPlayAudioAtIndex(index: Int) {
+        val item = audioQueue.getOrNull(index) ?: return
+        audioQueueIndex = index
+        _hasPreviousAudio.value = index > 0
+        _hasNextAudio.value = index < audioQueue.lastIndex
+
+        _activeAudio.value = item
+        _audioTitle.value = item.name
+        _audioArtist.value = null
+        _audioPositionMs.value = 0L
+        _audioDurationMs.value = 0L
+        _audioErrorMessage.value = null
+
+        val uri = if (item.path.startsWith("content://") || item.path.startsWith("file://")) {
+            Uri.parse(item.path)
+        } else {
+            Uri.fromFile(File(item.path))
+        }
+
+        // Load ID3 metadata off the main thread
+        viewModelScope.launch {
+            val metadata = withContext(Dispatchers.IO) {
+                extractAudioMetadata(uri, item)
+            }
+            if (_activeAudio.value?.path == item.path) {
+                _audioTitle.value = metadata.first ?: item.name
+                _audioArtist.value = metadata.second
+            }
+        }
+
+        try {
+            val player = getOrCreateAudioPlayer()
+            player.setMediaItem(MediaItem.fromUri(uri))
+            player.prepare()
+            player.play()
+        } catch (e: Exception) {
+            _isAudioPlaying.value = false
+            _audioErrorMessage.value = "Cannot play audio file"
+        }
+    }
+
+    private fun extractAudioMetadata(uri: Uri, item: FileItem): Pair<String?, String?> {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            if (item.isContentUri) {
+                retriever.setDataSource(getApplication(), uri)
+            } else {
+                retriever.setDataSource(item.path)
+            }
+            val title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
+            val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
+            title to artist
+        } catch (_: Exception) {
+            null to null
+        } finally {
+            try {
+                retriever.release()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun startAudioProgressTicker() {
+        audioProgressJob?.cancel()
+        audioProgressJob = viewModelScope.launch {
+            while (isActive) {
+                val player = audioPlayer
+                if (player != null) {
+                    _audioPositionMs.value = player.currentPosition.coerceAtLeast(0L)
+                    val dur = player.duration.coerceAtLeast(0L)
+                    if (dur > 0L) _audioDurationMs.value = dur
+                }
+                delay(250L)
+            }
+        }
+    }
+
     fun toggleAudioPlayback() {
-        _isAudioPlaying.value = !_isAudioPlaying.value
+        val player = audioPlayer ?: return
+        if (player.playbackState == Player.STATE_ENDED) {
+            player.seekTo(0L)
+            player.play()
+        } else if (player.isPlaying) {
+            player.pause()
+        } else {
+            player.play()
+        }
+    }
+
+    fun seekAudioTo(positionMs: Long) {
+        val player = audioPlayer ?: return
+        val clamped = positionMs.coerceIn(0L, _audioDurationMs.value.coerceAtLeast(0L))
+        player.seekTo(clamped)
+        _audioPositionMs.value = clamped
+    }
+
+    fun playNextAudio() {
+        if (audioQueueIndex + 1 in audioQueue.indices) {
+            loadAndPlayAudioAtIndex(audioQueueIndex + 1)
+        }
+    }
+
+    fun playPreviousAudio() {
+        if (audioQueueIndex - 1 in audioQueue.indices) {
+            loadAndPlayAudioAtIndex(audioQueueIndex - 1)
+        }
+    }
+
+    fun closeAudioPlayer() {
+        audioProgressJob?.cancel()
+        audioPlayer?.stop()
+        audioPlayer?.clearMediaItems()
+        _activeAudio.value = null
+        _audioTitle.value = null
+        _audioArtist.value = null
+        _isAudioPlaying.value = false
+        _audioPositionMs.value = 0L
+        _audioDurationMs.value = 0L
+        _audioErrorMessage.value = null
+        repository.clearVaultPreviewCache()
     }
 
     // CRUD operations
@@ -337,13 +628,20 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun saveDocumentContent(content: String) {
         val file = _activeText.value ?: return
+        if (file.isContentUri || file.isProtected) {
+            showMessage("Read-only preview cannot overwrite source file")
+            return
+        }
         viewModelScope.launch {
-            try {
-                File(file.path).writeText(content)
-                showMessage("Document saved")
-            } catch (e: Exception) {
-                showMessage("Failed to save changes")
+            val saved = withContext(Dispatchers.IO) {
+                try {
+                    File(file.path).writeText(content)
+                    true
+                } catch (_: Exception) {
+                    false
+                }
             }
+            showMessage(if (saved) "Document saved" else "Failed to save changes")
         }
     }
 
@@ -365,7 +663,7 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
             for (file in files) {
                 if (repository.deleteToTrash(file)) count++
             }
-            showMessage("Moved $count item(s) to Recycle Bin")
+            showMessage(if (count > 0) "Moved $count item(s) to Recycle Bin" else "Could not remove selected items")
             loadCurrentDirectory(_currentPath.value)
             loadRecentFiles()
             loadStorageStats()
@@ -378,6 +676,8 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
                 showMessage("Restored '${trashEntity.fileName}'")
                 loadCurrentDirectory(_currentPath.value)
                 loadStorageStats()
+            } else {
+                showMessage("Unable to restore '${trashEntity.fileName}'")
             }
         }
     }
@@ -412,7 +712,7 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
                 loadCurrentDirectory(_currentPath.value)
                 loadStorageStats()
             } else {
-                showMessage("Failed to paste items")
+                showMessage("Failed to paste items (check destination permissions)")
             }
         }
     }
@@ -428,44 +728,112 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    // Safe Vault
+    // --- Safe Vault Persistent Auth & AES-256-GCM Operations ---
+
+    fun setupVaultCredentials(pin: String, question: String, answer: String) {
+        if (pin.length != 4) return
+        securityManager.setupVaultCredentials(
+            pin = pin,
+            recoveryQuestion = question,
+            recoveryAnswer = answer
+        )
+        sessionUnlockedPin = pin
+        _isPinConfigured.value = true
+        _isVaultPasswordEnabled.value = true
+        _hasRecoveryConfigured.value = securityManager.hasRecoveryConfigured()
+        _recoveryQuestion.value = securityManager.getRecoveryQuestion()
+        _vaultFailedAttempts.value = 0
+        _vaultLockoutSeconds.value = 0L
+        _isVaultUnlocked.value = true
+        showMessage("Safe Vault PIN & Recovery Security configured")
+    }
+
     fun unlockVault(pin: String): Boolean {
-        if (!_isVaultPasswordEnabled.value || pin == _vaultPin.value || pin == "1234" || pin.equals("A1234", ignoreCase = true) || pin == "1") {
+        if (!_isVaultPasswordEnabled.value && _isPinConfigured.value) {
             _isVaultUnlocked.value = true
             return true
         }
-        return false
+        val remaining = securityManager.getLockoutRemainingSeconds()
+        if (remaining > 0L) {
+            _vaultLockoutSeconds.value = remaining
+            startLockoutCountdown()
+            return false
+        }
+        val verified = securityManager.verifyPin(pin)
+        _vaultFailedAttempts.value = securityManager.getFailedAttempts()
+        val newLockout = securityManager.getLockoutRemainingSeconds()
+        _vaultLockoutSeconds.value = newLockout
+        if (newLockout > 0L) startLockoutCountdown()
+
+        if (verified) {
+            sessionUnlockedPin = pin
+            _isVaultUnlocked.value = true
+        }
+        return verified
     }
 
     fun verifyRecoveryAnswer(input: String): Boolean {
-        val trimmed = input.trim()
-        return trimmed == "1" || trimmed.equals("A1234", ignoreCase = true)
+        return securityManager.verifyRecoveryAnswer(input)
     }
 
     fun setNewVaultPin(newPin: String) {
-        _vaultPin.value = newPin
+        if (newPin.length != 4) return
+        securityManager.updatePin(newPin)
+        sessionUnlockedPin = newPin
+        _isPinConfigured.value = true
         _isVaultUnlocked.value = true
         _isVaultPasswordEnabled.value = true
-        showMessage("Safe Vault PIN updated successfully: $newPin")
+        _vaultFailedAttempts.value = 0
+        _vaultLockoutSeconds.value = 0L
+        showMessage("Safe Vault PIN updated securely")
+    }
+
+    fun updateRecoverySecurity(question: String, answer: String) {
+        if (answer.isBlank()) return
+        securityManager.updateRecoveryQuestion(question, answer)
+        _hasRecoveryConfigured.value = securityManager.hasRecoveryConfigured()
+        _recoveryQuestion.value = securityManager.getRecoveryQuestion()
+        showMessage("Recovery security question updated")
     }
 
     fun setVaultPasswordEnabled(enabled: Boolean) {
+        securityManager.setPasswordProtectionEnabled(enabled)
         _isVaultPasswordEnabled.value = enabled
         if (!enabled) {
             _isVaultUnlocked.value = true
         }
-        showMessage(if (enabled) "Safe Vault PIN protection enabled" else "Safe Vault PIN disabled (Direct Access)")
+        showMessage(if (enabled) "Safe Vault PIN lock enabled" else "Safe Vault PIN lock disabled")
     }
 
     fun lockVault() {
         _isVaultUnlocked.value = false
     }
 
+    private fun startLockoutCountdown() {
+        lockoutTickerJob?.cancel()
+        lockoutTickerJob = viewModelScope.launch {
+            while (isActive) {
+                val rem = securityManager.getLockoutRemainingSeconds()
+                _vaultLockoutSeconds.value = rem
+                if (rem <= 0L) break
+                delay(1000L)
+            }
+        }
+    }
+
+    private fun getVaultCandidateKeys(): List<String> {
+        val list = mutableListOf(securityManager.getOrCreateMasterKeySecret())
+        sessionUnlockedPin?.let { list.add(it) }
+        list.add("1234") // Legacy compatibility for vault files encrypted prior to keystore upgrade
+        return list.distinct()
+    }
+
     fun addToVault(file: FileItem) {
         viewModelScope.launch {
-            val success = repository.moveToVault(file, _vaultPin.value)
+            val masterSecret = securityManager.getOrCreateMasterKeySecret()
+            val success = repository.moveToVault(file, masterSecret)
             if (success) {
-                showMessage("Item locked in AES-256 Safe Vault")
+                showMessage("Encrypted with AES-256-GCM in Safe Vault")
                 loadCurrentDirectory(_currentPath.value)
                 loadStorageStats()
             } else {
@@ -476,13 +844,24 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun restoreFromVault(vaultEntity: VaultEntity) {
         viewModelScope.launch {
-            val success = repository.restoreFromVault(vaultEntity, _vaultPin.value, _currentPath.value)
+            val success = repository.restoreFromVault(vaultEntity, getVaultCandidateKeys(), _currentPath.value)
             if (success) {
-                showMessage("Item decrypted & restored")
+                showMessage("Decrypted & restored '${vaultEntity.originalName}'")
                 loadCurrentDirectory(_currentPath.value)
                 loadStorageStats()
             } else {
-                showMessage("Failed to restore from Vault")
+                showMessage("Failed to decrypt Vault item")
+            }
+        }
+    }
+
+    fun previewVaultItem(vaultEntity: VaultEntity) {
+        viewModelScope.launch {
+            val tempItem = repository.decryptVaultItemToPreviewTemp(vaultEntity, getVaultCandidateKeys())
+            if (tempItem != null) {
+                openFile(tempItem)
+            } else {
+                showMessage("Unable to decrypt Vault file for preview")
             }
         }
     }
@@ -496,7 +875,7 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
             _largeFiles.value = repository.findLargeFiles()
             _isScanning.value = false
             if (!auto) {
-                showMessage("Scan complete! Storage analyzed.")
+                showMessage("Storage analysis complete")
             }
         }
     }
@@ -505,7 +884,7 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
         val currentJunk = _junkResult.value ?: return
         viewModelScope.launch {
             val freed = repository.cleanJunkFiles(currentJunk)
-            showMessage("Cleaned ${FileItem.formatFileSize(freed)} of residual junk!")
+            showMessage("Cleaned ${FileItem.formatFileSize(freed)} of residual junk")
             scanOptimizer(auto = true)
             loadStorageStats()
         }
@@ -514,7 +893,7 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
     fun deleteDuplicateFile(file: FileItem) {
         viewModelScope.launch {
             repository.deleteToTrash(file)
-            showMessage("Duplicate deleted")
+            showMessage("Duplicate moved to Recycle Bin")
             _duplicateGroups.value = repository.findDuplicateFiles()
             loadStorageStats()
         }
@@ -527,16 +906,24 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
     fun toggleFtpServer() {
         if (isFtpRunning.value) {
             localWebServer.stopServer()
-            showMessage("Wi-Fi File Server Stopped")
+            showMessage("Wi-Fi File Server stopped")
         } else {
             val url = localWebServer.startServer()
-            showMessage("Wi-Fi Server Online at $url")
+            if (isFtpRunning.value) {
+                showMessage("Wi-Fi Server active at $url")
+            } else {
+                showMessage(url)
+            }
         }
     }
 
     override fun onCleared() {
         super.onCleared()
         localWebServer.stopServer()
+        audioProgressJob?.cancel()
+        audioPlayer?.release()
+        audioPlayer = null
+        repository.clearVaultPreviewCache()
     }
 
     private fun showMessage(msg: String) {

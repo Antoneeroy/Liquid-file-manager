@@ -1,6 +1,5 @@
 package com.example.ui.dashboard
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,20 +20,23 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
-import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.Archive
-import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.InstallMobile
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.SdCard
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -55,10 +57,12 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.ExternalVolumeStats
 import com.example.data.model.FileCategory
 import com.example.data.model.FileItem
 import com.example.data.model.RamStats
 import com.example.data.model.StorageStats
+import com.example.ui.components.AdMobBannerBar
 import com.example.ui.components.GlassCard
 import com.example.ui.components.LiquidPageIndicator
 import com.example.ui.components.LiquidRamCard
@@ -68,14 +72,12 @@ import com.example.ui.theme.ApksCardTint
 import com.example.ui.theme.ApksGradient
 import com.example.ui.theme.AudioCardTint
 import com.example.ui.theme.AudioGradient
-import com.example.ui.theme.DeepEmerald
 import com.example.ui.theme.DocumentsCardTint
 import com.example.ui.theme.DocumentsGradient
 import com.example.ui.theme.DownloadsCardTint
 import com.example.ui.theme.DownloadsGradient
 import com.example.ui.theme.DriveCardTint
 import com.example.ui.theme.DriveGradient
-import com.example.ui.theme.ElectricBlue
 import com.example.ui.theme.ElectricPurple
 import com.example.ui.theme.FilesCardTint
 import com.example.ui.theme.FilesGradient
@@ -88,7 +90,6 @@ import com.example.ui.theme.LightTextPrimary
 import com.example.ui.theme.LightTextSecondary
 import com.example.ui.theme.LocalIsDarkTheme
 import com.example.ui.theme.NeonCyan
-import com.example.ui.theme.SunsetPink
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
@@ -96,6 +97,7 @@ import com.example.ui.theme.VaultCardTint
 import com.example.ui.theme.VaultGradient
 import com.example.ui.theme.VideosCardTint
 import com.example.ui.theme.VideosGradient
+import com.example.ui.theme.VoidBlack
 
 @Composable
 fun DashboardScreen(
@@ -103,10 +105,15 @@ fun DashboardScreen(
     ramStats: RamStats,
     showStorageBar: Boolean,
     recentFiles: List<FileItem>,
+    vaultCount: Int,
+    canRequestAds: Boolean,
     onCategoryClick: (FileCategory) -> Unit,
     onOptimizeClick: () -> Unit,
     onVaultClick: () -> Unit,
     onViewAllFilesClick: () -> Unit,
+    onOpenSdCardClick: (String) -> Unit,
+    onOpenSafPickerClick: () -> Unit,
+    onGrantStoragePermissionClick: () -> Unit,
     onFileClick: (FileItem) -> Unit,
     onSearchClick: () -> Unit,
     onWirelessClick: () -> Unit,
@@ -125,14 +132,13 @@ fun DashboardScreen(
     ) {
         item {
             Spacer(modifier = Modifier.height(8.dp))
-            // Header: Luxury Storage + Settings + Search + More
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Luxury Storage",
+                    text = "Liquid Files",
                     color = if (isDark) TextPrimary else LightTextPrimary,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
@@ -143,7 +149,7 @@ fun DashboardScreen(
                     IconButton(
                         onClick = onSettingsClick,
                         modifier = Modifier
-                            .size(42.dp)
+                            .size(44.dp)
                             .clip(CircleShape)
                             .background(Color(0x1AFFFFFF))
                             .border(1.dp, GlassBorderSubtle, CircleShape)
@@ -160,7 +166,7 @@ fun DashboardScreen(
                     IconButton(
                         onClick = onSearchClick,
                         modifier = Modifier
-                            .size(42.dp)
+                            .size(44.dp)
                             .clip(CircleShape)
                             .background(Color(0x1AFFFFFF))
                             .border(1.dp, GlassBorderSubtle, CircleShape)
@@ -178,7 +184,7 @@ fun DashboardScreen(
                         IconButton(
                             onClick = { showMenu = true },
                             modifier = Modifier
-                                .size(42.dp)
+                                .size(44.dp)
                                 .clip(CircleShape)
                                 .background(Color(0x1AFFFFFF))
                                 .border(1.dp, GlassBorderSubtle, CircleShape)
@@ -198,10 +204,10 @@ fun DashboardScreen(
                             modifier = Modifier.background(if (isDark) Color(0xF0101624) else Color(0xF0FFFFFF))
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Settings", color = if (isDark) TextPrimary else LightTextPrimary) },
+                                text = { Text("Open Document (System Picker)", color = if (isDark) TextPrimary else LightTextPrimary) },
                                 onClick = {
                                     showMenu = false
-                                    onSettingsClick()
+                                    onOpenSafPickerClick()
                                 }
                             )
                             DropdownMenuItem(
@@ -212,7 +218,7 @@ fun DashboardScreen(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("Wireless FTP Share", color = if (isDark) TextPrimary else LightTextPrimary) },
+                                text = { Text("Wi-Fi LAN File Portal", color = if (isDark) TextPrimary else LightTextPrimary) },
                                 onClick = {
                                     showMenu = false
                                     onWirelessClick()
@@ -225,13 +231,66 @@ fun DashboardScreen(
                                     onVaultClick()
                                 }
                             )
+                            DropdownMenuItem(
+                                text = { Text("Settings & Privacy", color = if (isDark) TextPrimary else LightTextPrimary) },
+                                onClick = {
+                                    showMenu = false
+                                    onSettingsClick()
+                                }
+                            )
                         }
                     }
                 }
             }
         }
 
-        // Section 1: RAM Storage Meter (Always visible or toggleable)
+        // Storage access prompt only when All Files Access is not granted
+        if (!storageStats.hasAllFilesPermission) {
+            item {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    cornerRadius = 22.dp,
+                    accentGlowColor = NeonCyan
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Filled.Storage, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(22.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Full Storage Permission Needed",
+                                    color = if (isDark) TextPrimary else LightTextPrimary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Grant access to manage folders, or use System Picker.",
+                                    color = if (isDark) TextSecondary else LightTextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = onGrantStoragePermissionClick,
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.testTag("btn_grant_storage_access")
+                        ) {
+                            Text("Allow", color = VoidBlack, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Section 1: Real Device RAM Memory
         item {
             LiquidRamCard(
                 ramStats = ramStats,
@@ -239,14 +298,13 @@ fun DashboardScreen(
             )
         }
 
-        // Section 2: Dual-tone Radial Storage Ring Card + 2x2 Mini Categories (Controlled by showStorageBar)
+        // Section 2: Real Storage Ring + 2x2 Category Quick Grid
         if (showStorageBar) {
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    // Left: Radial Ring Card
                     GlassCard(
                         modifier = Modifier
                             .weight(1.15f)
@@ -265,12 +323,12 @@ fun DashboardScreen(
                             LiquidStorageRing(
                                 progress = storageStats.usedPercentage,
                                 usedText = storageStats.usedFormatted,
-                                totalText = "${storageStats.totalFormatted} NVME",
+                                totalText = if (storageStats.isAvailable) "of ${storageStats.totalFormatted}" else "Unavailable",
+                                isAvailable = storageStats.isAvailable,
                                 size = 140.dp,
                                 strokeWidth = 12.dp
                             )
 
-                            // Glowing Tap to Optimize button
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
@@ -287,7 +345,7 @@ fun DashboardScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Tap to Optimize",
+                                    text = if (storageStats.isAvailable) "${storageStats.freeFormatted} free" else "Analyze Storage",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = NeonCyan
@@ -296,7 +354,6 @@ fun DashboardScreen(
                         }
                     }
 
-                    // Right: 2x2 Category Grid (Images, Videos, Archives, Audio)
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -350,15 +407,14 @@ fun DashboardScreen(
                 }
             }
 
-            // Documents Card & Safe Vault Card
+            // Documents Card & Safe Vault Card (Real counts & sizes only)
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    // Documents Card
-                    val docCount = storageStats.categoryCounts[FileCategory.DOCUMENTS] ?: 80
-                    val docSize = storageStats.categorySizes[FileCategory.DOCUMENTS]?.let { FileItem.formatFileSize(it) } ?: "2.6 MB"
+                    val docCount = storageStats.categoryCounts[FileCategory.DOCUMENTS] ?: 0
+                    val docSize = FileItem.formatFileSize(storageStats.categorySizes[FileCategory.DOCUMENTS] ?: 0L)
 
                     GlassCard(
                         modifier = Modifier
@@ -393,7 +449,7 @@ fun DashboardScreen(
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "$docSize • $docCount Docs",
+                                    text = "$docSize • $docCount files",
                                     color = if (isDark) TextSecondary else LightTextSecondary,
                                     fontSize = 11.sp
                                 )
@@ -401,8 +457,6 @@ fun DashboardScreen(
                         }
                     }
 
-                    // Safe Vault Card
-                    val vaultSize = storageStats.categorySizes[FileCategory.OTHER]?.let { FileItem.formatFileSize(it) } ?: "367 MB"
                     GlassCard(
                         modifier = Modifier
                             .weight(1.15f)
@@ -438,7 +492,7 @@ fun DashboardScreen(
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "Encrypted AES-256",
+                                        text = "$vaultCount encrypted",
                                         color = if (isDark) TextSecondary else LightTextSecondary,
                                         fontSize = 11.sp
                                     )
@@ -456,7 +510,17 @@ fun DashboardScreen(
                 }
             }
 
-            // Liquid Page Indicator (Exact match from Screenshot 1 & 3)
+            // Removable SD Card Banner (Shown ONLY when genuinely mounted and accessible)
+            storageStats.sdCardStats?.let { sd ->
+                item {
+                    SdCardVolumeCard(
+                        sd = sd,
+                        isDark = isDark,
+                        onClick = { onOpenSdCardClick(sd.path) }
+                    )
+                }
+            }
+
             item {
                 Box(
                     modifier = Modifier
@@ -464,15 +528,12 @@ fun DashboardScreen(
                         .padding(vertical = 2.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    LiquidPageIndicator(
-                        pageCount = 3,
-                        currentPage = 0
-                    )
+                    LiquidPageIndicator(pageCount = 3, currentPage = 0)
                 }
             }
         }
 
-        // Section 3: INTERNAL STORAGE • 9 items (Exact 3x3 layout from User's Screenshot!)
+        // Section 3: Real Internal Storage Categories Grid
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -480,7 +541,7 @@ fun DashboardScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "INTERNAL STORAGE • 9 items",
+                    text = "INTERNAL STORAGE • ${storageStats.totalRootItems} items",
                     color = if (isDark) TextPrimary else LightTextPrimary,
                     fontSize = 13.5.sp,
                     fontWeight = FontWeight.Bold,
@@ -503,9 +564,6 @@ fun DashboardScreen(
 
         // Row 1 of 3: Images, Videos, Files
         item {
-            val imgSize = storageStats.categorySizes[FileCategory.IMAGES]?.let { FileItem.formatFileSize(it) } ?: "238 MB"
-            val vidSize = storageStats.categorySizes[FileCategory.VIDEOS]?.let { FileItem.formatFileSize(it) } ?: "55.3 MB"
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -513,7 +571,7 @@ fun DashboardScreen(
                 BigSquircleCard(
                     modifier = Modifier.weight(1f),
                     title = "Images",
-                    subtitle = "$imgSize • Edit Oct",
+                    subtitle = formatCategoryStats(storageStats, FileCategory.IMAGES),
                     icon = Icons.Filled.Image,
                     gradient = ImagesGradient,
                     cardTint = ImagesCardTint,
@@ -522,7 +580,7 @@ fun DashboardScreen(
                 BigSquircleCard(
                     modifier = Modifier.weight(1f),
                     title = "Videos",
-                    subtitle = "$vidSize • Edit Oct",
+                    subtitle = formatCategoryStats(storageStats, FileCategory.VIDEOS),
                     icon = Icons.Filled.Videocam,
                     gradient = VideosGradient,
                     cardTint = VideosCardTint,
@@ -531,7 +589,7 @@ fun DashboardScreen(
                 BigSquircleCard(
                     modifier = Modifier.weight(1f),
                     title = "Files",
-                    subtitle = "${storageStats.totalFormatted} • Internal",
+                    subtitle = if (storageStats.isAvailable) "${storageStats.freeFormatted} free" else "Browse Root",
                     icon = Icons.Filled.Folder,
                     gradient = FilesGradient,
                     cardTint = FilesCardTint,
@@ -540,20 +598,16 @@ fun DashboardScreen(
             }
         }
 
-        // Row 2 of 3: Audio foo..., Documents, Safe Vault
+        // Row 2 of 3: Audio, Documents, Safe Vault
         item {
-            val audioSize = storageStats.categorySizes[FileCategory.AUDIO]?.let { FileItem.formatFileSize(it) } ?: "2.5 MB"
-            val docSize = storageStats.categorySizes[FileCategory.DOCUMENTS]?.let { FileItem.formatFileSize(it) } ?: "2.6 MB"
-            val vaultSize = storageStats.categorySizes[FileCategory.OTHER]?.let { FileItem.formatFileSize(it) } ?: "367 MB"
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 BigSquircleCard(
                     modifier = Modifier.weight(1f),
-                    title = "Audio foo...",
-                    subtitle = "$audioSize • 08h Oct",
+                    title = "Audio",
+                    subtitle = formatCategoryStats(storageStats, FileCategory.AUDIO),
                     icon = Icons.Filled.MusicNote,
                     gradient = AudioGradient,
                     cardTint = AudioCardTint,
@@ -562,7 +616,7 @@ fun DashboardScreen(
                 BigSquircleCard(
                     modifier = Modifier.weight(1f),
                     title = "Documents",
-                    subtitle = "$docSize • 09h Oct",
+                    subtitle = formatCategoryStats(storageStats, FileCategory.DOCUMENTS),
                     icon = Icons.Filled.Description,
                     gradient = DocumentsGradient,
                     cardTint = DocumentsCardTint,
@@ -571,7 +625,7 @@ fun DashboardScreen(
                 BigSquircleCard(
                     modifier = Modifier.weight(1f),
                     title = "Safe Vault",
-                    subtitle = "$vaultSize • 08h Oct",
+                    subtitle = "$vaultCount AES-256",
                     icon = Icons.Filled.Lock,
                     gradient = VaultGradient,
                     cardTint = VaultCardTint,
@@ -580,28 +634,25 @@ fun DashboardScreen(
             }
         }
 
-        // Row 3 of 3: Drive Sync, Downloads, APKs & Back...
+        // Row 3 of 3: System Picker (SAF), Downloads, APKs
         item {
-            val downSize = storageStats.categorySizes[FileCategory.DOWNLOADS]?.let { FileItem.formatFileSize(it) } ?: "1.2 GB"
-            val apkSize = storageStats.categorySizes[FileCategory.APKS]?.let { FileItem.formatFileSize(it) } ?: "480 MB"
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 BigSquircleCard(
                     modifier = Modifier.weight(1f),
-                    title = "Drive Sync",
-                    subtitle = "14.2 GB • 12h Oct",
-                    icon = Icons.Filled.CloudSync,
+                    title = "Pick File",
+                    subtitle = "SAF Browser",
+                    icon = Icons.Filled.FolderOpen,
                     gradient = DriveGradient,
                     cardTint = DriveCardTint,
-                    onClick = onWirelessClick
+                    onClick = onOpenSafPickerClick
                 )
                 BigSquircleCard(
                     modifier = Modifier.weight(1f),
                     title = "Downloads",
-                    subtitle = "$downSize • 14h Oct",
+                    subtitle = formatCategoryStats(storageStats, FileCategory.DOWNLOADS),
                     icon = Icons.Filled.FileDownload,
                     gradient = DownloadsGradient,
                     cardTint = DownloadsCardTint,
@@ -609,8 +660,8 @@ fun DashboardScreen(
                 )
                 BigSquircleCard(
                     modifier = Modifier.weight(1f),
-                    title = "APKs & Back...",
-                    subtitle = "$apkSize • 15h Oct",
+                    title = "APKs",
+                    subtitle = formatCategoryStats(storageStats, FileCategory.APKS),
                     icon = Icons.Filled.InstallMobile,
                     gradient = ApksGradient,
                     cardTint = ApksCardTint,
@@ -619,12 +670,17 @@ fun DashboardScreen(
             }
         }
 
+        // Non-intrusive AdMob Banner (safely separated from file actions)
+        item {
+            AdMobBannerBar(canRequestAds = canRequestAds)
+        }
+
         // Section 4: Recent Activity Feed
         item {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 10.dp),
+                    .padding(top = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -635,22 +691,113 @@ fun DashboardScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "${recentFiles.size} files",
+                    text = "${recentFiles.size} file(s)",
                     color = if (isDark) TextMuted else LightTextMuted,
                     fontSize = 12.sp
                 )
             }
         }
 
-        items(recentFiles) { file ->
-            RecentFileItemRow(
-                file = file,
-                onClick = { onFileClick(file) }
-            )
+        if (recentFiles.isEmpty()) {
+            item {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    cornerRadius = 18.dp
+                ) {
+                    Text(
+                        text = if (storageStats.hasAllFilesPermission) "No recent files found on device storage." else "Grant storage access or use Pick File (SAF) to view recent files.",
+                        color = if (isDark) TextSecondary else LightTextSecondary,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+            }
+        } else {
+            items(recentFiles, key = { it.path }) { file ->
+                RecentFileItemRow(
+                    file = file,
+                    onClick = { onFileClick(file) }
+                )
+            }
         }
 
         item {
             Spacer(modifier = Modifier.height(96.dp))
+        }
+    }
+}
+
+private fun formatCategoryStats(stats: StorageStats, cat: FileCategory): String {
+    val size = stats.categorySizes[cat] ?: 0L
+    val count = stats.categoryCounts[cat] ?: 0
+    return "${FileItem.formatFileSize(size)} • $count"
+}
+
+@Composable
+private fun SdCardVolumeCard(
+    sd: ExternalVolumeStats,
+    isDark: Boolean,
+    onClick: () -> Unit
+) {
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 22.dp,
+        accentGlowColor = ElectricPurple,
+        onClick = onClick
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    LiquidSquircleBadge(
+                        icon = Icons.Filled.SdCard,
+                        gradient = listOf(ElectricPurple, NeonCyan),
+                        contentDescription = sd.label,
+                        size = 40.dp,
+                        iconSize = 20.dp,
+                        cornerRadius = 12.dp
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = sd.label,
+                            color = if (isDark) TextPrimary else LightTextPrimary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "${sd.usedFormatted} / ${sd.totalFormatted} (${sd.freeFormatted} free)",
+                            color = if (isDark) TextSecondary else LightTextSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                    contentDescription = "Open SD Card",
+                    tint = if (isDark) TextMuted else LightTextMuted,
+                    modifier = Modifier.size(13.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(CircleShape)
+                    .background(if (isDark) Color(0x25FFFFFF) else Color(0x18000000))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(sd.usedPercentage.coerceIn(0.02f, 1f))
+                        .height(6.dp)
+                        .clip(CircleShape)
+                        .background(Brush.linearGradient(listOf(ElectricPurple, NeonCyan)))
+                )
+            }
         }
     }
 }

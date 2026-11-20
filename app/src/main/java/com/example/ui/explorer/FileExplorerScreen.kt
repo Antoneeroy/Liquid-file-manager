@@ -1,5 +1,6 @@
 package com.example.ui.explorer
 
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -9,7 +10,6 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.InstallMobile
@@ -68,6 +69,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -83,14 +85,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
 import com.example.data.model.ClipboardAction
 import com.example.data.model.ClipboardItem
 import com.example.data.model.FileCategory
@@ -98,6 +104,7 @@ import com.example.data.model.FileItem
 import com.example.data.model.SortBy
 import com.example.data.model.SortOrder
 import com.example.data.model.ViewMode
+import com.example.ui.components.AdMobBannerBar
 import com.example.ui.components.GlassCard
 import com.example.ui.components.LiquidSquircleBadge
 import com.example.ui.theme.AmberGold
@@ -111,6 +118,10 @@ import com.example.ui.theme.ElectricPurple
 import com.example.ui.theme.FilesGradient
 import com.example.ui.theme.GlassBorderSubtle
 import com.example.ui.theme.ImagesGradient
+import com.example.ui.theme.LightTextMuted
+import com.example.ui.theme.LightTextPrimary
+import com.example.ui.theme.LightTextSecondary
+import com.example.ui.theme.LocalIsDarkTheme
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.SunsetPink
 import com.example.ui.theme.TextMuted
@@ -126,6 +137,8 @@ fun FileExplorerScreen(
     rootPath: String,
     files: List<FileItem>,
     clipboard: ClipboardItem?,
+    hasAllFilesPermission: Boolean,
+    canRequestAds: Boolean,
     onNavigateTo: (String) -> Unit,
     onNavigateUp: () -> Boolean,
     onOpenFile: (FileItem) -> Unit,
@@ -138,33 +151,28 @@ fun FileExplorerScreen(
     onPaste: () -> Unit,
     onClearClipboard: () -> Unit,
     onShareFile: (FileItem) -> Unit,
+    onRequestStoragePermission: () -> Unit,
+    onOpenSafPicker: () -> Unit,
     selectedCategory: FileCategory? = null,
     onSelectCategory: (FileCategory?) -> Unit = {},
-    showHiddenFiles: Boolean = false,
-    onToggleShowHiddenFiles: () -> Unit = {},
-    onToggleHideFile: (FileItem) -> Unit = {},
-    onToggleHideMultiple: (List<FileItem>) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val isDark = LocalIsDarkTheme.current
     var searchQuery by remember { mutableStateOf("") }
     var viewMode by remember { mutableStateOf(ViewMode.LIST) }
     var sortBy by remember { mutableStateOf(SortBy.NAME) }
     var sortOrder by remember { mutableStateOf(SortOrder.ASCENDING) }
     var showSortMenu by remember { mutableStateOf(false) }
 
-    // Multi-selection state
     val selectedFiles = remember { mutableStateListOf<FileItem>() }
     val isSelectionMode = selectedFiles.isNotEmpty()
 
-    // File action dialogs
     var fileToRename by remember { mutableStateOf<FileItem?>(null) }
     var newRenameName by remember { mutableStateOf("") }
-    var fileToDelete by remember { mutableStateOf<FileItem?>(null) }
     var activeContextMenuFile by remember { mutableStateOf<FileItem?>(null) }
 
     val focusManager = LocalFocusManager.current
 
-    // Handle back button: if in selection mode, clear selection; if in subfolder, navigate up
     BackHandler(enabled = isSelectionMode || currentPath != rootPath) {
         if (isSelectionMode) {
             selectedFiles.clear()
@@ -173,11 +181,10 @@ fun FileExplorerScreen(
         }
     }
 
-    // Filter and Sort files
     val displayedFiles = remember(files, searchQuery, selectedCategory, sortBy, sortOrder) {
         files.filter { file ->
             val matchesQuery = searchQuery.isBlank() || file.name.contains(searchQuery, ignoreCase = true)
-            val matchesCategory = selectedCategory == null || file.category == selectedCategory
+            val matchesCategory = selectedCategory == null || file.category == selectedCategory || selectedCategory == FileCategory.DOWNLOADS
             matchesQuery && matchesCategory
         }.sortedWith { a, b ->
             if (a.isDirectory != b.isDirectory) {
@@ -202,7 +209,6 @@ fun FileExplorerScreen(
         ) {
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Top Toolbar: Back, Title/Search, ViewMode Toggle, Sort
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -211,7 +217,7 @@ fun FileExplorerScreen(
                 if (isSelectionMode) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { selectedFiles.clear() }) {
-                            Icon(Icons.Filled.Clear, contentDescription = "Cancel Selection", tint = TextPrimary)
+                            Icon(Icons.Filled.Clear, contentDescription = "Cancel Selection", tint = if (isDark) TextPrimary else LightTextPrimary)
                         }
                         Text(
                             text = "${selectedFiles.size} selected",
@@ -230,7 +236,7 @@ fun FileExplorerScreen(
                                 selectedFiles.addAll(displayedFiles)
                             }
                         }) {
-                            Icon(Icons.Filled.CheckCircle, contentDescription = "Select All", tint = TextPrimary)
+                            Icon(Icons.Filled.CheckCircle, contentDescription = "Select All", tint = if (isDark) TextPrimary else LightTextPrimary)
                         }
                     }
                 } else {
@@ -238,76 +244,89 @@ fun FileExplorerScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f)
                     ) {
-                        if (currentPath != rootPath) {
+                        if (currentPath != rootPath && selectedCategory == null) {
                             IconButton(
                                 onClick = { onNavigateUp() },
                                 modifier = Modifier
-                                    .size(38.dp)
+                                    .size(40.dp)
                                     .clip(CircleShape)
                                     .background(Color(0x1AFFFFFF))
                             ) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = if (isDark) TextPrimary else LightTextPrimary)
                             }
                             Spacer(modifier = Modifier.width(8.dp))
                         }
                         Text(
-                            text = "Explorer",
-                            color = TextPrimary,
+                            text = selectedCategory?.label ?: "Explorer",
+                            color = if (isDark) TextPrimary else LightTextPrimary,
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        // Toggle View Mode
+                        IconButton(
+                            onClick = onOpenSafPicker,
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color(0x1AFFFFFF))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.FolderOpen,
+                                contentDescription = "Open Document Picker",
+                                tint = NeonCyan,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
                         IconButton(
                             onClick = {
                                 viewMode = if (viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST
                             },
                             modifier = Modifier
-                                .size(38.dp)
+                                .size(40.dp)
                                 .clip(CircleShape)
                                 .background(Color(0x1AFFFFFF))
                         ) {
                             Icon(
                                 imageVector = if (viewMode == ViewMode.LIST) Icons.Filled.GridView else Icons.Filled.ViewList,
                                 contentDescription = "Toggle View",
-                                tint = TextPrimary,
+                                tint = if (isDark) TextPrimary else LightTextPrimary,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
 
-                        // Sort Menu
                         Box {
                             IconButton(
                                 onClick = { showSortMenu = true },
                                 modifier = Modifier
-                                    .size(38.dp)
+                                    .size(40.dp)
                                     .clip(CircleShape)
                                     .background(Color(0x1AFFFFFF))
                             ) {
-                                Icon(Icons.Filled.Sort, contentDescription = "Sort", tint = TextPrimary, modifier = Modifier.size(20.dp))
+                                Icon(Icons.Filled.Sort, contentDescription = "Sort", tint = if (isDark) TextPrimary else LightTextPrimary, modifier = Modifier.size(20.dp))
                             }
 
                             DropdownMenu(
                                 expanded = showSortMenu,
                                 onDismissRequest = { showSortMenu = false },
-                                modifier = Modifier.background(Color(0xF0101624))
+                                modifier = Modifier.background(if (isDark) Color(0xF0101624) else Color(0xF0FFFFFF))
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("Sort by Name", color = TextPrimary) },
+                                    text = { Text("Sort by Name", color = if (isDark) TextPrimary else LightTextPrimary) },
                                     onClick = { sortBy = SortBy.NAME; showSortMenu = false }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Sort by Date", color = TextPrimary) },
+                                    text = { Text("Sort by Date", color = if (isDark) TextPrimary else LightTextPrimary) },
                                     onClick = { sortBy = SortBy.DATE; showSortMenu = false }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Sort by Size", color = TextPrimary) },
+                                    text = { Text("Sort by Size", color = if (isDark) TextPrimary else LightTextPrimary) },
                                     onClick = { sortBy = SortBy.SIZE; showSortMenu = false }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Sort by Type", color = TextPrimary) },
+                                    text = { Text("Sort by Type", color = if (isDark) TextPrimary else LightTextPrimary) },
                                     onClick = { sortBy = SortBy.TYPE; showSortMenu = false }
                                 )
                                 DropdownMenuItem(
@@ -330,30 +349,31 @@ fun FileExplorerScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Dynamic Breadcrumbs Path Bar
             BreadcrumbsBar(
                 currentPath = currentPath,
                 rootPath = rootPath,
-                onPathSegmentClick = onNavigateTo
+                onPathSegmentClick = {
+                    onSelectCategory(null)
+                    onNavigateTo(it)
+                }
             )
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Search Bar
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("input_explorer_search"),
-                placeholder = { Text("Search files & folders...", color = TextMuted, fontSize = 13.sp) },
+                placeholder = { Text("Search files & folders...", color = if (isDark) TextMuted else LightTextMuted, fontSize = 13.sp) },
                 leadingIcon = {
                     Icon(Icons.Filled.Search, contentDescription = "Search", tint = NeonCyan, modifier = Modifier.size(18.dp))
                 },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Filled.Clear, contentDescription = "Clear", tint = TextSecondary, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Filled.Clear, contentDescription = "Clear", tint = if (isDark) TextSecondary else LightTextSecondary, modifier = Modifier.size(18.dp))
                         }
                     }
                 },
@@ -364,8 +384,8 @@ fun FileExplorerScreen(
                     unfocusedContainerColor = Color(0x18131926),
                     focusedBorderColor = NeonCyan,
                     unfocusedBorderColor = GlassBorderSubtle,
-                    focusedTextColor = TextPrimary,
-                    unfocusedTextColor = TextPrimary
+                    focusedTextColor = if (isDark) TextPrimary else LightTextPrimary,
+                    unfocusedTextColor = if (isDark) TextPrimary else LightTextPrimary
                 ),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() })
@@ -373,7 +393,6 @@ fun FileExplorerScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Filter Chips (All, Images, Videos, Audio, Documents, Archives)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -398,11 +417,11 @@ fun FileExplorerScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // File items: Grid or List
             if (displayedFiles.isEmpty()) {
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
+                        .weight(1f)
+                        .fillMaxWidth()
                         .padding(bottom = 90.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -410,23 +429,41 @@ fun FileExplorerScreen(
                         Icon(
                             imageVector = Icons.Filled.Folder,
                             contentDescription = "Empty",
-                            tint = TextMuted.copy(alpha = 0.5f),
+                            tint = (if (isDark) TextMuted else LightTextMuted).copy(alpha = 0.5f),
                             modifier = Modifier.size(56.dp)
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = if (searchQuery.isNotEmpty()) "No matching files" else "Folder is empty",
-                            color = TextSecondary,
+                            text = if (searchQuery.isNotEmpty()) "No matching files" else if (!hasAllFilesPermission) "Scoped folder empty or permission needed" else "Folder is empty",
+                            color = if (isDark) TextSecondary else LightTextSecondary,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Medium
                         )
+                        if (!hasAllFilesPermission && searchQuery.isEmpty()) {
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Button(
+                                    onClick = onRequestStoragePermission,
+                                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("Grant Access", color = VoidBlack, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                                OutlinedButton(
+                                    onClick = onOpenSafPicker,
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("Pick File (SAF)", color = NeonCyan, fontSize = 12.sp)
+                                }
+                            }
+                        }
                     }
                 }
             } else if (viewMode == ViewMode.LIST) {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(bottom = 120.dp)
+                    contentPadding = PaddingValues(bottom = 128.dp)
                 ) {
                     items(displayedFiles, key = { it.path }) { file ->
                         val isSelected = selectedFiles.contains(file)
@@ -442,9 +479,7 @@ fun FileExplorerScreen(
                                 }
                             },
                             onLongClick = {
-                                if (!isSelectionMode) {
-                                    selectedFiles.add(file)
-                                }
+                                if (!isSelected) selectedFiles.add(file)
                             },
                             onMoreClick = { activeContextMenuFile = file }
                         )
@@ -453,17 +488,16 @@ fun FileExplorerScreen(
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(3),
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 120.dp)
+                    contentPadding = PaddingValues(bottom = 128.dp)
                 ) {
                     items(displayedFiles, key = { it.path }) { file ->
                         val isSelected = selectedFiles.contains(file)
                         FileGridItem(
                             file = file,
                             isSelected = isSelected,
-                            isSelectionMode = isSelectionMode,
                             onClick = {
                                 if (isSelectionMode) {
                                     if (isSelected) selectedFiles.remove(file) else selectedFiles.add(file)
@@ -472,9 +506,7 @@ fun FileExplorerScreen(
                                 }
                             },
                             onLongClick = {
-                                if (!isSelectionMode) {
-                                    selectedFiles.add(file)
-                                }
+                                if (!isSelected) selectedFiles.add(file)
                             }
                         )
                     }
@@ -482,7 +514,17 @@ fun FileExplorerScreen(
             }
         }
 
-        // Floating Selection Action Bar (when files are selected)
+        // Subtle Banner Ad shown ONLY when no file selection/clipboard/operation bar is active
+        if (!isSelectionMode && clipboard == null && activeContextMenuFile == null) {
+            AdMobBannerBar(
+                canRequestAds = canRequestAds,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 82.dp, start = 16.dp, end = 16.dp)
+            )
+        }
+
+        // Floating Selection Action Bar (zero ads shown)
         AnimatedVisibility(
             visible = isSelectionMode,
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
@@ -544,7 +586,7 @@ fun FileExplorerScreen(
             }
         }
 
-        // Floating Clipboard Paste Bar (when items are copied/cut)
+        // Floating Clipboard Paste Bar (zero ads shown)
         AnimatedVisibility(
             visible = clipboard != null && !isSelectionMode,
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
@@ -577,7 +619,7 @@ fun FileExplorerScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "${clip.files.size} items ready to paste",
+                                text = "${clip.files.size} item(s) ready to paste",
                                 color = TextPrimary,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold
@@ -607,23 +649,25 @@ fun FileExplorerScreen(
             }
         }
 
-        // File Context Menu (More Options)
+        // File Context Menu
         activeContextMenuFile?.let { file ->
             DropdownMenu(
                 expanded = true,
                 onDismissRequest = { activeContextMenuFile = null },
                 modifier = Modifier.background(Color(0xF0101624))
             ) {
-                DropdownMenuItem(
-                    leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null, tint = NeonCyan) },
-                    text = { Text("Rename", color = TextPrimary) },
-                    onClick = {
-                        activeContextMenuFile = null
-                        fileToRename = file
-                        newRenameName = file.name
-                    }
-                )
-                if (!file.isDirectory) {
+                if (!file.isContentUri) {
+                    DropdownMenuItem(
+                        leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null, tint = NeonCyan) },
+                        text = { Text("Rename", color = TextPrimary) },
+                        onClick = {
+                            activeContextMenuFile = null
+                            fileToRename = file
+                            newRenameName = file.name
+                        }
+                    )
+                }
+                if (!file.isDirectory && !file.isContentUri) {
                     DropdownMenuItem(
                         leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null, tint = NeonCyan) },
                         text = { Text("Move to Safe Vault (AES-256)", color = TextPrimary) },
@@ -632,6 +676,8 @@ fun FileExplorerScreen(
                             onAddToVault(file)
                         }
                     )
+                }
+                if (!file.isDirectory) {
                     DropdownMenuItem(
                         leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null, tint = NeonCyan) },
                         text = { Text("Share", color = TextPrimary) },
@@ -721,10 +767,12 @@ private fun BreadcrumbsBar(
             currentPath.trimStart('/')
         }
         val parts = if (rel.isEmpty()) emptyList() else rel.split('/')
-        val list = mutableListOf("Internal Storage" to rootPath)
-        var cumulative = rootPath
+        val baseLabel = if (currentPath.startsWith(rootPath)) "Internal Storage" else "Volume"
+        val basePath = if (currentPath.startsWith(rootPath)) rootPath else "/"
+        val list = mutableListOf(baseLabel to basePath)
+        var cumulative = basePath
         for (part in parts) {
-            cumulative = "$cumulative/$part"
+            cumulative = if (cumulative == "/") "/$part" else "$cumulative/$part"
             list.add(part to cumulative)
         }
         list
@@ -789,6 +837,51 @@ private fun FilterChipPill(
 }
 
 @Composable
+private fun FileItemIconOrThumb(
+    file: FileItem,
+    size: Dp,
+    iconSize: Dp,
+    cornerRadius: Dp
+) {
+    val context = LocalContext.current
+    val (icon, gradient, _) = getCategoryVisuals(file)
+
+    if (!file.isDirectory && file.category == FileCategory.IMAGES) {
+        val modelData: Any = remember(file.path) {
+            if (file.path.startsWith("content://") || file.path.startsWith("file://")) Uri.parse(file.path)
+            else File(file.path)
+        }
+        SubcomposeAsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(modelData)
+                .size(128)
+                .crossfade(true)
+                .build(),
+            contentDescription = file.name,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(size)
+                .clip(RoundedCornerShape(cornerRadius)),
+            loading = {
+                LiquidSquircleBadge(icon = icon, gradient = gradient, contentDescription = null, size = size, iconSize = iconSize, cornerRadius = cornerRadius)
+            },
+            error = {
+                LiquidSquircleBadge(icon = icon, gradient = gradient, contentDescription = null, size = size, iconSize = iconSize, cornerRadius = cornerRadius)
+            }
+        )
+    } else {
+        LiquidSquircleBadge(
+            icon = icon,
+            gradient = gradient,
+            contentDescription = file.name,
+            size = size,
+            iconSize = iconSize,
+            cornerRadius = cornerRadius
+        )
+    }
+}
+
+@Composable
 private fun FileListItem(
     file: FileItem,
     isSelected: Boolean,
@@ -797,7 +890,8 @@ private fun FileListItem(
     onLongClick: () -> Unit,
     onMoreClick: () -> Unit
 ) {
-    val (icon, gradient, accentColor) = getCategoryVisuals(file)
+    val isDark = LocalIsDarkTheme.current
+    val (_, _, accentColor) = getCategoryVisuals(file)
 
     GlassCard(
         modifier = Modifier
@@ -807,7 +901,8 @@ private fun FileListItem(
         accentGlowColor = if (isSelected) NeonCyan else accentColor,
         borderBrush = if (isSelected) Brush.linearGradient(listOf(NeonCyan, ElectricPurple)) else null,
         backgroundColor = if (isSelected) Color(0x3500E5FF) else null,
-        onClick = onClick
+        onClick = onClick,
+        onLongClick = onLongClick
     ) {
         Row(
             modifier = Modifier
@@ -831,21 +926,14 @@ private fun FileListItem(
                 Spacer(modifier = Modifier.width(10.dp))
             }
 
-            LiquidSquircleBadge(
-                icon = icon,
-                gradient = gradient,
-                contentDescription = file.name,
-                size = 44.dp,
-                iconSize = 22.dp,
-                cornerRadius = 14.dp
-            )
+            FileItemIconOrThumb(file = file, size = 44.dp, iconSize = 22.dp, cornerRadius = 14.dp)
 
             Spacer(modifier = Modifier.width(14.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = file.name,
-                    color = TextPrimary,
+                    color = if (isDark) TextPrimary else LightTextPrimary,
                     fontSize = 13.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1
@@ -858,7 +946,7 @@ private fun FileListItem(
                 }
                 Text(
                     text = subtitle,
-                    color = TextSecondary,
+                    color = if (isDark) TextSecondary else LightTextSecondary,
                     fontSize = 11.sp
                 )
             }
@@ -867,7 +955,7 @@ private fun FileListItem(
                 Icon(
                     imageVector = Icons.Filled.MoreVert,
                     contentDescription = "Options",
-                    tint = TextMuted,
+                    tint = if (isDark) TextMuted else LightTextMuted,
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -879,11 +967,11 @@ private fun FileListItem(
 private fun FileGridItem(
     file: FileItem,
     isSelected: Boolean,
-    isSelectionMode: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    val (icon, gradient, accentColor) = getCategoryVisuals(file)
+    val isDark = LocalIsDarkTheme.current
+    val (_, _, accentColor) = getCategoryVisuals(file)
 
     GlassCard(
         modifier = Modifier.height(128.dp),
@@ -891,7 +979,8 @@ private fun FileGridItem(
         accentGlowColor = if (isSelected) NeonCyan else accentColor,
         borderBrush = if (isSelected) Brush.linearGradient(listOf(NeonCyan, ElectricPurple)) else null,
         backgroundColor = if (isSelected) Color(0x3500E5FF) else null,
-        onClick = onClick
+        onClick = onClick,
+        onLongClick = onLongClick
     ) {
         Column(
             modifier = Modifier
@@ -900,18 +989,11 @@ private fun FileGridItem(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            LiquidSquircleBadge(
-                icon = icon,
-                gradient = gradient,
-                contentDescription = file.name,
-                size = 50.dp,
-                iconSize = 24.dp,
-                cornerRadius = 16.dp
-            )
+            FileItemIconOrThumb(file = file, size = 50.dp, iconSize = 24.dp, cornerRadius = 16.dp)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = file.name,
-                color = TextPrimary,
+                color = if (isDark) TextPrimary else LightTextPrimary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1
@@ -919,7 +1001,7 @@ private fun FileGridItem(
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = if (file.isDirectory) "${file.itemCount} items" else file.formattedSize,
-                color = TextMuted,
+                color = if (isDark) TextMuted else LightTextMuted,
                 fontSize = 10.sp
             )
         }

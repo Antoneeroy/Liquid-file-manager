@@ -1,9 +1,6 @@
 package com.example.ui.settings
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -28,7 +24,7 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.PieChart
-import androidx.compose.material.icons.filled.SdCard
+import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Visibility
@@ -65,13 +61,11 @@ import com.example.ui.components.LiquidRamCard
 import com.example.ui.theme.ElectricBlue
 import com.example.ui.theme.ElectricPurple
 import com.example.ui.theme.GlassBorderSubtle
-import com.example.ui.theme.LightTextMuted
 import com.example.ui.theme.LightTextPrimary
 import com.example.ui.theme.LightTextSecondary
 import com.example.ui.theme.LocalIsDarkTheme
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.SunsetPink
-import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VoidBlack
@@ -82,14 +76,18 @@ fun SettingsScreen(
     showHiddenFiles: Boolean,
     showStorageBar: Boolean,
     ramStats: RamStats,
+    isPinConfigured: Boolean,
     isVaultPasswordEnabled: Boolean,
-    isBiometricEnabled: Boolean = true,
+    isBiometricEnabled: Boolean,
+    isPrivacyOptionsRequired: Boolean,
     onToggleTheme: (Boolean) -> Unit,
     onToggleHiddenFiles: (Boolean) -> Unit,
     onToggleStorageBar: (Boolean) -> Unit,
     onToggleVaultPassword: (Boolean) -> Unit,
-    onToggleBiometric: (Boolean) -> Unit = {},
+    onToggleBiometric: (Boolean) -> Unit,
     onChangeVaultPin: (String) -> Unit,
+    onUpdateRecoverySecurity: (question: String, answer: String) -> Unit,
+    onOpenAdPrivacyOptions: () -> Unit,
     onBoostRam: () -> Unit,
     onClearAppCache: () -> Unit,
     onNavigateBack: () -> Unit,
@@ -97,8 +95,11 @@ fun SettingsScreen(
 ) {
     val isDark = LocalIsDarkTheme.current
     var showChangePinDialog by remember { mutableStateOf(false) }
+    var showRecoveryConfigDialog by remember { mutableStateOf(false) }
     var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
     var newPinInput by remember { mutableStateOf("") }
+    var recQuestionInput by remember { mutableStateOf("Memorable recovery phrase") }
+    var recAnswerInput by remember { mutableStateOf("") }
 
     Column(
         modifier = modifier
@@ -131,7 +132,7 @@ fun SettingsScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Preferences, Safe Vault & System RAM",
+                    text = "Preferences, Safe Vault & Privacy",
                     color = if (isDark) TextSecondary else LightTextSecondary,
                     fontSize = 11.5.sp
                 )
@@ -144,10 +145,7 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Section 1: Real RAM Memory
-            item {
-                SectionHeader("Device RAM Memory")
-            }
+            item { SectionHeader("Device RAM Memory") }
 
             item {
                 LiquidRamCard(
@@ -156,7 +154,6 @@ fun SettingsScreen(
                 )
             }
 
-            // Section 2: Safe Vault Security (Password Protection On / Off)
             item {
                 Spacer(modifier = Modifier.height(4.dp))
                 SectionHeader("Safe Vault Security")
@@ -167,7 +164,13 @@ fun SettingsScreen(
                     icon = if (isVaultPasswordEnabled) Icons.Filled.Lock else Icons.Filled.LockOpen,
                     iconColor = if (isVaultPasswordEnabled) NeonCyan else SunsetPink,
                     title = "Vault Password Protection",
-                    subtitle = if (isVaultPasswordEnabled) "PIN required to access Vault (Default: 1234)" else "Vault password is OFF (Opens directly)",
+                    subtitle = if (!isPinConfigured) {
+                        "Set up a 4-digit PIN inside Safe Vault"
+                    } else if (isVaultPasswordEnabled) {
+                        "PBKDF2 PIN required to unlock Vault"
+                    } else {
+                        "Vault password lock paused"
+                    },
                     checked = isVaultPasswordEnabled,
                     onCheckedChange = onToggleVaultPassword
                 )
@@ -177,8 +180,8 @@ fun SettingsScreen(
                 SettingSwitchRow(
                     icon = Icons.Filled.Fingerprint,
                     iconColor = ElectricPurple,
-                    title = "Biometric (Fingerprint) Unlock",
-                    subtitle = if (isBiometricEnabled) "Quick biometric authentication enabled" else "Biometric prompt disabled",
+                    title = "Biometric (Fingerprint / Face) Unlock",
+                    subtitle = if (isBiometricEnabled) "Hardware BiometricPrompt enabled" else "Biometric prompt disabled",
                     checked = isBiometricEnabled,
                     onCheckedChange = onToggleBiometric
                 )
@@ -197,7 +200,7 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                             Box(
                                 modifier = Modifier
                                     .size(36.dp)
@@ -210,13 +213,13 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = "Change Vault PIN",
+                                    text = if (isPinConfigured) "Change Vault PIN" else "Set Vault PIN",
                                     color = if (isDark) TextPrimary else LightTextPrimary,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "Emergency code: A1234 | Recovery: 1",
+                                    text = "Secured via PBKDF2-SHA256 & Android Keystore",
                                     color = if (isDark) TextSecondary else LightTextSecondary,
                                     fontSize = 11.sp
                                 )
@@ -228,61 +231,105 @@ fun SettingsScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0x2800E5FF)),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text("Change", color = NeonCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text(if (isPinConfigured) "Change" else "Set", color = NeonCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
 
-            // Section 3: Display & Theme Preferences
+            item {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    cornerRadius = 20.dp,
+                    onClick = { showRecoveryConfigDialog = true }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0x287C4DFF)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Filled.Security, contentDescription = null, tint = ElectricPurple, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Update Recovery Passphrase",
+                                    color = if (isDark) TextPrimary else LightTextPrimary,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Configure your personal PIN recovery question",
+                                    color = if (isDark) TextSecondary else LightTextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+
+                        Button(
+                            onClick = { showRecoveryConfigDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0x287C4DFF)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Update", color = ElectricPurple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
             item {
                 Spacer(modifier = Modifier.height(4.dp))
                 SectionHeader("Display & Theme Preferences")
             }
 
-            // Day / Night Theme Toggle
             item {
                 SettingSwitchRow(
                     icon = if (isDarkTheme) Icons.Filled.DarkMode else Icons.Filled.LightMode,
                     iconColor = if (isDarkTheme) NeonCyan else SunsetPink,
                     title = if (isDarkTheme) "Theme: Luxury Night Mode" else "Theme: Frosted Day Mode",
-                    subtitle = if (isDarkTheme) "Deep obsidian void black (#07090E)" else "Bright liquid frost pearl white",
+                    subtitle = if (isDarkTheme) "Deep obsidian canvas" else "Bright liquid frost",
                     checked = isDarkTheme,
                     onCheckedChange = onToggleTheme
                 )
             }
 
-            // Show / Hide Storage Bar
             item {
                 SettingSwitchRow(
                     icon = Icons.Filled.PieChart,
                     iconColor = ElectricBlue,
-                    title = "Dashboard Storage Bar & Ring",
-                    subtitle = "Show real-time glowing radial storage progress on dashboard",
+                    title = "Dashboard Storage Overview",
+                    subtitle = "Show real-time glowing radial storage progress ring",
                     checked = showStorageBar,
                     onCheckedChange = onToggleStorageBar
                 )
             }
 
-            // Section 4: File Explorer & Privacy
             item {
                 Spacer(modifier = Modifier.height(4.dp))
-                SectionHeader("File System & Privacy")
+                SectionHeader("File System & Cache")
             }
 
-            // Show Hidden Files (.nomedia, .hidden)
             item {
                 SettingSwitchRow(
                     icon = if (showHiddenFiles) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
                     iconColor = SunsetPink,
                     title = "Show Hidden Files",
-                    subtitle = "Display system dotfiles (.nomedia, .cache, .tmp) in explorer",
+                    subtitle = "Display dotfiles (.nomedia, .cache) in Explorer",
                     checked = showHiddenFiles,
                     onCheckedChange = onToggleHiddenFiles
                 )
             }
 
-            // Clear App Cache action
             item {
                 GlassCard(
                     modifier = Modifier.fillMaxWidth(),
@@ -296,7 +343,7 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                             Box(
                                 modifier = Modifier
                                     .size(36.dp)
@@ -309,13 +356,13 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = "Clear Explorer Cache",
+                                    text = "Clear App Cache",
                                     color = if (isDark) TextPrimary else LightTextPrimary,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "Reclaim thumbnail cache & temp indexes",
+                                    text = "Reclaim thumbnail cache & temporary preview files",
                                     color = if (isDark) TextSecondary else LightTextSecondary,
                                     fontSize = 11.sp
                                 )
@@ -333,10 +380,62 @@ fun SettingsScreen(
                 }
             }
 
-            // Section 5: Legal & Play Store Compliance
             item {
                 Spacer(modifier = Modifier.height(4.dp))
-                SectionHeader("Legal & Play Store Compliance")
+                SectionHeader("Privacy, Consent & Compliance")
+            }
+
+            if (isPrivacyOptionsRequired) {
+                item {
+                    GlassCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        cornerRadius = 20.dp,
+                        onClick = onOpenAdPrivacyOptions
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color(0x2800E5FF)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Filled.PrivacyTip, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(20.dp))
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "Manage Ad Privacy Choices",
+                                        color = if (isDark) TextPrimary else LightTextPrimary,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Update Google UMP consent preferences",
+                                        color = if (isDark) TextSecondary else LightTextSecondary,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+
+                            Button(
+                                onClick = onOpenAdPrivacyOptions,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0x2800E5FF)),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.testTag("btn_ad_privacy_choices")
+                            ) {
+                                Text("Manage", color = NeonCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
             }
 
             item {
@@ -368,13 +467,13 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = "Privacy Policy & Compliance",
+                                    text = "Privacy Policy & Data Safety",
                                     color = if (isDark) TextPrimary else LightTextPrimary,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "100% on-device, zero telemetry & offline safe",
+                                    text = "Local storage access, Vault AES-256 & AdMob disclosure",
                                     color = if (isDark) TextSecondary else LightTextSecondary,
                                     fontSize = 11.sp
                                 )
@@ -398,7 +497,6 @@ fun SettingsScreen(
             }
         }
 
-        // Change PIN Dialog in Settings
         if (showChangePinDialog) {
             AlertDialog(
                 onDismissRequest = { showChangePinDialog = false },
@@ -451,10 +549,73 @@ fun SettingsScreen(
             )
         }
 
-        // Privacy Policy Dialog
+        if (showRecoveryConfigDialog) {
+            AlertDialog(
+                onDismissRequest = { showRecoveryConfigDialog = false },
+                containerColor = if (isDark) Color(0xF0101624) else Color(0xF0FFFFFF),
+                title = { Text("Set Recovery Security Question", color = if (isDark) TextPrimary else LightTextPrimary, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(
+                            value = recQuestionInput,
+                            onValueChange = { recQuestionInput = it },
+                            label = { Text("Security Question") },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = NeonCyan,
+                                unfocusedBorderColor = GlassBorderSubtle,
+                                focusedTextColor = if (isDark) TextPrimary else LightTextPrimary,
+                                unfocusedTextColor = if (isDark) TextPrimary else LightTextPrimary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = recAnswerInput,
+                            onValueChange = { recAnswerInput = it },
+                            label = { Text("Recovery Answer (Min 2 chars)") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = NeonCyan,
+                                unfocusedBorderColor = GlassBorderSubtle,
+                                focusedTextColor = if (isDark) TextPrimary else LightTextPrimary,
+                                unfocusedTextColor = if (isDark) TextPrimary else LightTextPrimary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (recAnswerInput.trim().length >= 2) {
+                                onUpdateRecoverySecurity(recQuestionInput, recAnswerInput.trim())
+                                recAnswerInput = ""
+                                showRecoveryConfigDialog = false
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+                    ) {
+                        Text("Save Recovery", color = VoidBlack, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showRecoveryConfigDialog = false }) {
+                        Text("Cancel", color = if (isDark) TextSecondary else LightTextSecondary)
+                    }
+                }
+            )
+        }
+
         if (showPrivacyPolicyDialog) {
             PrivacyPolicyDialog(
-                onDismiss = { showPrivacyPolicyDialog = false }
+                onDismiss = { showPrivacyPolicyDialog = false },
+                onManagePrivacyOptions = if (isPrivacyOptionsRequired) {
+                    {
+                        showPrivacyPolicyDialog = false
+                        onOpenAdPrivacyOptions()
+                    }
+                } else null
             )
         }
     }

@@ -1,6 +1,5 @@
 package com.example.ui.optimizer
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -9,7 +8,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,7 +46,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -65,18 +62,22 @@ import com.example.data.db.TrashEntity
 import com.example.data.model.FileItem
 import com.example.data.repository.FileManagerRepository
 import com.example.ui.components.GlassCard
+import com.example.ui.components.LiquidNativeAdCard
 import com.example.ui.components.LiquidSquircleBadge
-import com.example.ui.theme.CyanPurpleGradient
 import com.example.ui.theme.DeepEmerald
-import com.example.ui.theme.ElectricBlue
 import com.example.ui.theme.ElectricPurple
 import com.example.ui.theme.GlassBorderSubtle
+import com.example.ui.theme.LightTextMuted
+import com.example.ui.theme.LightTextPrimary
+import com.example.ui.theme.LightTextSecondary
+import com.example.ui.theme.LocalIsDarkTheme
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.SunsetPink
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VoidBlack
+import java.io.File
 
 @Composable
 fun StorageOptimizerScreen(
@@ -85,6 +86,7 @@ fun StorageOptimizerScreen(
     largeFiles: List<FileItem>,
     trashItems: List<TrashEntity>,
     isScanning: Boolean,
+    canRequestAds: Boolean,
     onStartScan: () -> Unit,
     onCleanJunk: () -> Unit,
     onDeleteDuplicate: (FileItem) -> Unit,
@@ -93,6 +95,7 @@ fun StorageOptimizerScreen(
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isDark = LocalIsDarkTheme.current
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Junk Clean", "Duplicates", "Large Files", "Trash")
 
@@ -114,7 +117,6 @@ fun StorageOptimizerScreen(
     ) {
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Top Bar
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -122,12 +124,12 @@ fun StorageOptimizerScreen(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onNavigateBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = if (isDark) TextPrimary else LightTextPrimary)
                 }
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = "Storage Optimizer",
-                    color = TextPrimary,
+                    color = if (isDark) TextPrimary else LightTextPrimary,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -136,7 +138,7 @@ fun StorageOptimizerScreen(
             IconButton(
                 onClick = onStartScan,
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .background(Color(0x20FFFFFF))
             ) {
@@ -151,7 +153,6 @@ fun StorageOptimizerScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Tabs
         TabRow(
             selectedTabIndex = selectedTab,
             containerColor = Color.Transparent,
@@ -174,7 +175,7 @@ fun StorageOptimizerScreen(
                             text = title,
                             fontSize = 12.sp,
                             fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal,
-                            color = if (selectedTab == index) NeonCyan else TextMuted
+                            color = if (selectedTab == index) NeonCyan else if (isDark) TextMuted else LightTextMuted
                         )
                     }
                 )
@@ -187,7 +188,9 @@ fun StorageOptimizerScreen(
             0 -> JunkCleanerTab(
                 junkResult = junkResult,
                 isScanning = isScanning,
+                canRequestAds = canRequestAds,
                 onCleanJunk = onCleanJunk,
+                onStartScan = onStartScan,
                 spinAngle = spinAngle
             )
             1 -> DuplicatesTab(
@@ -206,28 +209,50 @@ fun StorageOptimizerScreen(
     }
 }
 
+private fun calculateEntriesSize(files: List<File>?): Long {
+    if (files == null) return 0L
+    var total = 0L
+    for (file in files) {
+        if (!file.exists()) continue
+        if (file.isDirectory) {
+            file.walkTopDown().maxDepth(4).forEach { if (it.isFile) total += it.length() }
+        } else {
+            total += file.length()
+        }
+    }
+    return total
+}
+
 @Composable
 private fun JunkCleanerTab(
     junkResult: FileManagerRepository.JunkScanResult?,
     isScanning: Boolean,
+    canRequestAds: Boolean,
     onCleanJunk: () -> Unit,
+    onStartScan: () -> Unit,
     spinAngle: Float
 ) {
-    val junkBytes = junkResult?.totalJunkBytes ?: 145_000_000L
+    val isDark = LocalIsDarkTheme.current
+    val junkBytes = junkResult?.totalJunkBytes ?: 0L
     val formattedJunk = remember(junkBytes) { FileItem.formatFileSize(junkBytes) }
+    val tempSize = remember(junkResult) { FileItem.formatFileSize(calculateEntriesSize(junkResult?.tempFiles)) }
+    val cacheSize = remember(junkResult) { FileItem.formatFileSize(calculateEntriesSize(junkResult?.cacheFiles)) }
+    val tempCount = junkResult?.tempFiles?.size ?: 0
+    val emptyCount = junkResult?.emptyFolders?.size ?: 0
+    val cacheCount = junkResult?.cacheFiles?.size ?: 0
+    val hasCleanableJunk = junkBytes > 0L || emptyCount > 0
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            // Hero Liquid Glass Cleaner Card
             GlassCard(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(210.dp),
+                    .height(215.dp),
                 cornerRadius = 28.dp,
-                backgroundColor = Color(0x35101626)
+                backgroundColor = if (isDark) Color(0x35101626) else Color(0xEBFFFFFF)
             ) {
                 Column(
                     modifier = Modifier
@@ -238,7 +263,7 @@ private fun JunkCleanerTab(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(70.dp)
+                            .size(68.dp)
                             .clip(CircleShape)
                             .background(Brush.radialGradient(listOf(Color(0x3300E5FF), Color(0x157C4DFF), Color.Transparent)))
                             .border(1.5.dp, GlassBorderSubtle, CircleShape),
@@ -249,28 +274,34 @@ private fun JunkCleanerTab(
                             contentDescription = null,
                             tint = NeonCyan,
                             modifier = Modifier
-                                .size(34.dp)
+                                .size(32.dp)
                                 .rotate(if (isScanning) spinAngle else 0f)
                         )
                     }
 
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = formattedJunk,
-                            fontSize = 28.sp,
+                            text = if (isScanning) "Scanning..." else formattedJunk,
+                            fontSize = 26.sp,
                             fontWeight = FontWeight.Bold,
-                            color = TextPrimary
+                            color = if (isDark) TextPrimary else LightTextPrimary
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = if (isScanning) "Scanning residual junk..." else "System Junk & Cache Detected",
+                            text = when {
+                                isScanning -> "Inspecting accessible temp files, caches & empty dirs..."
+                                junkResult == null -> "Tap Rescan to analyze storage"
+                                hasCleanableJunk -> "Residual Temp, Log & Cache Detected"
+                                else -> "No residual junk detected"
+                            },
                             fontSize = 12.sp,
-                            color = TextSecondary
+                            color = if (isDark) TextSecondary else LightTextSecondary
                         )
                     }
 
                     Button(
-                        onClick = onCleanJunk,
+                        onClick = if (junkResult == null) onStartScan else onCleanJunk,
+                        enabled = !isScanning && (junkResult == null || hasCleanableJunk),
                         colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
@@ -280,7 +311,12 @@ private fun JunkCleanerTab(
                     ) {
                         Icon(Icons.Filled.CleaningServices, contentDescription = null, tint = VoidBlack, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Clean Junk Now", color = VoidBlack, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = if (junkResult == null) "Scan Storage Now" else if (hasCleanableJunk) "Clean Junk Now" else "Storage Clean",
+                            color = VoidBlack,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -288,8 +324,8 @@ private fun JunkCleanerTab(
 
         item {
             Text(
-                text = "Junk Breakdown",
-                color = TextPrimary,
+                text = "Scan Breakdown",
+                color = if (isDark) TextPrimary else LightTextPrimary,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -297,9 +333,9 @@ private fun JunkCleanerTab(
 
         item {
             JunkItemCard(
-                title = "App Cache & Temp Files",
-                subtitle = "${junkResult?.tempFiles?.size ?: 12} files found",
-                size = "78.4 MB",
+                title = "App Explorer Cache",
+                subtitle = "$cacheCount cache entry/entries",
+                size = cacheSize,
                 icon = Icons.Filled.Cached,
                 iconColor = NeonCyan
             )
@@ -307,8 +343,8 @@ private fun JunkCleanerTab(
 
         item {
             JunkItemCard(
-                title = "Empty Residual Folders",
-                subtitle = "${junkResult?.emptyFolders?.size ?: 5} directories",
+                title = "Empty Folders",
+                subtitle = "$emptyCount empty directories",
                 size = "0 B",
                 icon = Icons.Filled.FolderDelete,
                 iconColor = SunsetPink
@@ -317,12 +353,17 @@ private fun JunkCleanerTab(
 
         item {
             JunkItemCard(
-                title = "Obsolete Log Files (.log, .tmp)",
-                subtitle = "Old debug traces",
-                size = "66.6 MB",
+                title = "Temp & Log Files (.tmp, .log)",
+                subtitle = "$tempCount file(s) found",
+                size = tempSize,
                 icon = Icons.Filled.DeleteSweep,
                 iconColor = ElectricPurple
             )
+        }
+
+        // Non-intrusive Google AdMob Native Ad (safe location below analysis summary)
+        item {
+            LiquidNativeAdCard(canRequestAds = canRequestAds)
         }
 
         item {
@@ -336,6 +377,7 @@ private fun DuplicatesTab(
     duplicateGroups: List<FileManagerRepository.DuplicateGroup>,
     onDeleteDuplicate: (FileItem) -> Unit
 ) {
+    val isDark = LocalIsDarkTheme.current
     if (duplicateGroups.isEmpty()) {
         Box(
             modifier = Modifier
@@ -346,9 +388,9 @@ private fun DuplicatesTab(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = DeepEmerald, modifier = Modifier.size(54.dp))
                 Spacer(modifier = Modifier.height(12.dp))
-                Text("No Duplicates Found", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text("No Duplicates Found", color = if (isDark) TextPrimary else LightTextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("Your storage is completely optimized", color = TextMuted, fontSize = 12.sp)
+                Text("No identical SHA-256 files detected in accessible folders", color = if (isDark) TextMuted else LightTextMuted, fontSize = 12.sp)
             }
         }
     } else {
@@ -358,14 +400,14 @@ private fun DuplicatesTab(
         ) {
             item {
                 Text(
-                    text = "${duplicateGroups.size} Duplicate Sets Found",
-                    color = TextPrimary,
+                    text = "${duplicateGroups.size} Duplicate Group(s) Found",
+                    color = if (isDark) TextPrimary else LightTextPrimary,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
 
-            items(duplicateGroups) { group ->
+            items(duplicateGroups, key = { "${it.hash}_${it.size}" }) { group ->
                 GlassCard(
                     modifier = Modifier.fillMaxWidth(),
                     cornerRadius = 20.dp
@@ -383,7 +425,7 @@ private fun DuplicatesTab(
                             )
                             Text(
                                 text = "${group.files.size} copies",
-                                color = TextMuted,
+                                color = if (isDark) TextMuted else LightTextMuted,
                                 fontSize = 11.sp
                             )
                         }
@@ -399,13 +441,13 @@ private fun DuplicatesTab(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = file.name,
-                                        color = TextPrimary,
+                                        color = if (isDark) TextPrimary else LightTextPrimary,
                                         fontSize = 12.5.sp,
                                         maxLines = 1
                                     )
                                     Text(
                                         text = if (index == 0) "Original • ${file.relativeTime}" else "Duplicate • ${file.relativeTime}",
-                                        color = if (index == 0) DeepEmerald else TextMuted,
+                                        color = if (index == 0) DeepEmerald else if (isDark) TextMuted else LightTextMuted,
                                         fontSize = 10.sp
                                     )
                                 }
@@ -415,7 +457,7 @@ private fun DuplicatesTab(
                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0x33FF2A85)),
                                         shape = RoundedCornerShape(10.dp)
                                     ) {
-                                        Text("Delete", color = SunsetPink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        Text("Trash", color = SunsetPink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -435,6 +477,7 @@ private fun DuplicatesTab(
 private fun LargeFilesTab(
     largeFiles: List<FileItem>
 ) {
+    val isDark = LocalIsDarkTheme.current
     if (largeFiles.isEmpty()) {
         Box(
             modifier = Modifier
@@ -442,7 +485,7 @@ private fun LargeFilesTab(
                 .padding(bottom = 90.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text("No large files (>20MB) found", color = TextSecondary, fontSize = 14.sp)
+            Text("No large files (>20MB) found", color = if (isDark) TextSecondary else LightTextSecondary, fontSize = 14.sp)
         }
     } else {
         LazyColumn(
@@ -451,13 +494,13 @@ private fun LargeFilesTab(
         ) {
             item {
                 Text(
-                    text = "${largeFiles.size} Large Files Detected",
-                    color = TextPrimary,
+                    text = "${largeFiles.size} Large File(s) Detected",
+                    color = if (isDark) TextPrimary else LightTextPrimary,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
-            items(largeFiles) { file ->
+            items(largeFiles, key = { it.path }) { file ->
                 GlassCard(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -481,9 +524,9 @@ private fun LargeFilesTab(
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(text = file.name, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            Text(text = file.name, color = if (isDark) TextPrimary else LightTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                             Spacer(modifier = Modifier.height(2.dp))
-                            Text(text = "${file.formattedSize} • ${file.formattedDate}", color = TextSecondary, fontSize = 11.sp)
+                            Text(text = "${file.formattedSize} • ${file.formattedDate}", color = if (isDark) TextSecondary else LightTextSecondary, fontSize = 11.sp)
                         }
                     }
                 }
@@ -501,6 +544,7 @@ private fun TrashTab(
     onRestore: (TrashEntity) -> Unit,
     onEmptyAll: () -> Unit
 ) {
+    val isDark = LocalIsDarkTheme.current
     Column(modifier = Modifier.fillMaxSize()) {
         if (trashItems.isNotEmpty()) {
             Row(
@@ -511,8 +555,8 @@ private fun TrashTab(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "${trashItems.size} files in Recycle Bin",
-                    color = TextPrimary,
+                    text = "${trashItems.size} file(s) in Recycle Bin",
+                    color = if (isDark) TextPrimary else LightTextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -534,9 +578,9 @@ private fun TrashTab(
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Filled.Delete, contentDescription = null, tint = TextMuted.copy(alpha = 0.5f), modifier = Modifier.size(54.dp))
+                    Icon(Icons.Filled.Delete, contentDescription = null, tint = if (isDark) TextMuted.copy(alpha = 0.5f) else LightTextMuted, modifier = Modifier.size(54.dp))
                     Spacer(modifier = Modifier.height(10.dp))
-                    Text("Recycle Bin is Empty", color = TextSecondary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    Text("Recycle Bin is Empty", color = if (isDark) TextSecondary else LightTextSecondary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                 }
             }
         } else {
@@ -559,9 +603,9 @@ private fun TrashTab(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(text = item.fileName, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                Text(text = item.fileName, color = if (isDark) TextPrimary else LightTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                                 Spacer(modifier = Modifier.height(2.dp))
-                                Text(text = FileItem.formatFileSize(item.size), color = TextSecondary, fontSize = 11.sp)
+                                Text(text = FileItem.formatFileSize(item.size), color = if (isDark) TextSecondary else LightTextSecondary, fontSize = 11.sp)
                             }
 
                             Button(
@@ -592,6 +636,7 @@ private fun JunkItemCard(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     iconColor: Color
 ) {
+    val isDark = LocalIsDarkTheme.current
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -617,8 +662,8 @@ private fun JunkItemCard(
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
-                    Text(text = title, color = TextPrimary, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
-                    Text(text = subtitle, color = TextMuted, fontSize = 11.sp)
+                    Text(text = title, color = if (isDark) TextPrimary else LightTextPrimary, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
+                    Text(text = subtitle, color = if (isDark) TextMuted else LightTextMuted, fontSize = 11.sp)
                 }
             }
             Text(text = size, color = iconColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)

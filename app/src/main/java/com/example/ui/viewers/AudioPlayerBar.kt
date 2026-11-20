@@ -1,19 +1,11 @@
 package com.example.ui.viewers
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -26,6 +18,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
@@ -40,9 +34,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -59,127 +50,168 @@ import com.example.ui.theme.VoidBlack
 @Composable
 fun AudioPlayerBar(
     file: FileItem,
+    title: String?,
+    artist: String?,
     isPlaying: Boolean,
+    positionMs: Long,
+    durationMs: Long,
+    hasPrevious: Boolean,
+    hasNext: Boolean,
+    errorMessage: String?,
     onTogglePlay: () -> Unit,
+    onSeekTo: (Long) -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var progress by remember { mutableFloatStateOf(0.35f) }
+    var isSeeking by remember { mutableStateOf(false) }
+    var tempSlider by remember { mutableFloatStateOf(0f) }
 
-    val infiniteTransition = rememberInfiniteTransition(label = "waveform")
-    val wave1 by infiniteTransition.animateFloat(
-        initialValue = 0.2f, targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(tween(450, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "w1"
-    )
-    val wave2 by infiniteTransition.animateFloat(
-        initialValue = 0.9f, targetValue = 0.3f,
-        animationSpec = infiniteRepeatable(tween(550, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "w2"
-    )
-    val wave3 by infiniteTransition.animateFloat(
-        initialValue = 0.4f, targetValue = 0.95f,
-        animationSpec = infiniteRepeatable(tween(380, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "w3"
-    )
-    val wave4 by infiniteTransition.animateFloat(
-        initialValue = 0.7f, targetValue = 0.25f,
-        animationSpec = infiniteRepeatable(tween(620, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "w4"
-    )
+    val progress = remember(positionMs, durationMs, isSeeking, tempSlider) {
+        if (isSeeking) tempSlider
+        else if (durationMs > 0L) (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+        else 0f
+    }
 
     GlassCard(
         modifier = modifier
             .fillMaxWidth()
-            .height(72.dp)
             .padding(horizontal = 16.dp),
         cornerRadius = 24.dp,
         backgroundColor = Color(0xF00F1522)
     ) {
-        Row(
+        Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
-            // Waveform / Icon
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0x3300E5FF)),
-                contentAlignment = Alignment.Center
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                if (isPlaying) {
-                    Canvas(modifier = Modifier.size(24.dp)) {
-                        val barWidth = 3.dp.toPx()
-                        val spacing = 3.dp.toPx()
-                        val maxHeight = size.height * 0.8f
-                        val heights = listOf(wave1, wave2, wave3, wave4)
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (errorMessage != null) Color(0x33FF2A85) else Color(0x3300E5FF)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.MusicNote,
+                        contentDescription = null,
+                        tint = if (errorMessage != null) SunsetPink else NeonCyan,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
 
-                        heights.forEachIndexed { i, h ->
-                            val x = i * (barWidth + spacing) + 2.dp.toPx()
-                            val barH = maxHeight * h
-                            val y = (size.height - barH) / 2f
-                            drawRoundRect(
-                                color = NeonCyan,
-                                topLeft = Offset(x, y),
-                                size = Size(barWidth, barH),
-                                cornerRadius = CornerRadius(2.dp.toPx())
-                            )
-                        }
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title?.takeIf { it.isNotBlank() } ?: file.name,
+                        color = TextPrimary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = errorMessage ?: artist?.takeIf { it.isNotBlank() } ?: "${file.extension.uppercase()} Audio",
+                        color = if (errorMessage != null) SunsetPink else TextSecondary,
+                        fontSize = 11.sp,
+                        maxLines = 1
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onPrevious,
+                        enabled = hasPrevious,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.SkipPrevious,
+                            contentDescription = "Previous Track",
+                            tint = if (hasPrevious) TextPrimary else TextMuted.copy(alpha = 0.4f),
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
-                } else {
-                    Icon(Icons.Filled.MusicNote, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(22.dp))
+
+                    IconButton(
+                        onClick = onTogglePlay,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(NeonCyan)
+                    ) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = "Play/Pause",
+                            tint = VoidBlack,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onNext,
+                        enabled = hasNext,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.SkipNext,
+                            contentDescription = "Next Track",
+                            tint = if (hasNext) TextPrimary else TextMuted.copy(alpha = 0.4f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Filled.Close, contentDescription = "Close Audio Player", tint = TextMuted, modifier = Modifier.size(16.dp))
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.width(10.dp))
-
-            // Title & Scrub slider
-            Column(modifier = Modifier.weight(1f)) {
+            // Seekbar + Real Timestamps
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = file.name,
-                    color = TextPrimary,
-                    fontSize = 12.5.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1
+                    text = formatMediaDuration(
+                        if (isSeeking && durationMs > 0L) (tempSlider * durationMs).toLong() else positionMs
+                    ),
+                    color = TextSecondary,
+                    fontSize = 10.sp
                 )
                 Slider(
                     value = progress,
-                    onValueChange = { progress = it },
+                    onValueChange = {
+                        isSeeking = true
+                        tempSlider = it
+                    },
+                    onValueChangeFinished = {
+                        if (durationMs > 0L) {
+                            onSeekTo((tempSlider * durationMs).toLong())
+                        }
+                        isSeeking = false
+                    },
+                    enabled = durationMs > 0L && errorMessage == null,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(20.dp),
+                        .weight(1f)
+                        .height(22.dp)
+                        .padding(horizontal = 6.dp),
                     colors = SliderDefaults.colors(
                         thumbColor = NeonCyan,
                         activeTrackColor = NeonCyan,
                         inactiveTrackColor = Color(0x30FFFFFF)
                     )
                 )
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Play / Pause Button
-            IconButton(
-                onClick = onTogglePlay,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(NeonCyan)
-            ) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    contentDescription = "Play/Pause",
-                    tint = VoidBlack,
-                    modifier = Modifier.size(20.dp)
+                Text(
+                    text = formatMediaDuration(durationMs),
+                    color = TextSecondary,
+                    fontSize = 10.sp
                 )
-            }
-
-            IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Filled.Close, contentDescription = "Close", tint = TextMuted, modifier = Modifier.size(16.dp))
             }
         }
     }

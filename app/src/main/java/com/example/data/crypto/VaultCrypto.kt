@@ -22,22 +22,35 @@ object VaultCrypto {
     private const val BUFFER_SIZE = 64 * 1024 // 64 KB streaming buffer
 
     private fun deriveKey(pin: String, salt: ByteArray): SecretKeySpec {
+        val chars = pin.toCharArray()
         val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-        val spec = PBEKeySpec(pin.toCharArray(), salt, ITERATION_COUNT, KEY_LENGTH_BIT)
-        val tmp = factory.generateSecret(spec)
-        return SecretKeySpec(tmp.encoded, "AES")
+        val spec = PBEKeySpec(chars, salt, ITERATION_COUNT, KEY_LENGTH_BIT)
+        return try {
+            val tmp = factory.generateSecret(spec)
+            val encoded = tmp.encoded
+            try {
+                SecretKeySpec(encoded, "AES")
+            } finally {
+                encoded?.fill(0)
+            }
+        } finally {
+            spec.clearPassword()
+            chars.fill('\u0000')
+        }
     }
 
     /**
      * Encrypts inputFile to outputFile using streaming AES-256-GCM.
-     * Prevents OutOfMemoryError on large video/audio/archive files.
+     * Preserves exact binary format (16-byte salt + 12-byte IV + GCM ciphertext) for update compatibility.
      */
     fun encryptFile(inputFile: File, outputFile: File, pin: String): Boolean {
-        if (!inputFile.exists() || !inputFile.canRead()) return false
+        if (!inputFile.exists() || !inputFile.canRead() || pin.isEmpty()) return false
+        outputFile.parentFile?.let { if (!it.exists()) it.mkdirs() }
         val tempOutput = File(outputFile.parentFile, "${outputFile.name}.tmp")
         return try {
-            val salt = ByteArray(SALT_LENGTH_BYTE).also { SecureRandom().nextBytes(it) }
-            val iv = ByteArray(IV_LENGTH_BYTE).also { SecureRandom().nextBytes(it) }
+            val random = SecureRandom()
+            val salt = ByteArray(SALT_LENGTH_BYTE).also { random.nextBytes(it) }
+            val iv = ByteArray(IV_LENGTH_BYTE).also { random.nextBytes(it) }
             val secretKey = deriveKey(pin, salt)
 
             val cipher = Cipher.getInstance(ALGORITHM)
@@ -60,16 +73,18 @@ object VaultCrypto {
                 fos.flush()
             }
 
-            if (tempOutput.exists() && tempOutput.length() > 0) {
+            if (tempOutput.exists()) {
                 if (outputFile.exists()) outputFile.delete()
-                tempOutput.renameTo(outputFile)
-                true
+                if (tempOutput.renameTo(outputFile)) {
+                    true
+                } else {
+                    tempOutput.delete()
+                    false
+                }
             } else {
-                tempOutput.delete()
                 false
             }
         } catch (e: Exception) {
-            e.printStackTrace()
             if (tempOutput.exists()) tempOutput.delete()
             false
         }
@@ -77,10 +92,11 @@ object VaultCrypto {
 
     /**
      * Decrypts inputFile to outputFile using streaming AES-256-GCM.
-     * Throws / catches authentication tag validation failure if PIN is incorrect.
+     * Validates GCM authentication tag on stream completion; deletes temp file on auth failure.
      */
     fun decryptFile(inputFile: File, outputFile: File, pin: String): Boolean {
-        if (!inputFile.exists() || !inputFile.canRead()) return false
+        if (!inputFile.exists() || !inputFile.canRead() || pin.isEmpty()) return false
+        outputFile.parentFile?.let { if (!it.exists()) it.mkdirs() }
         val tempOutput = File(outputFile.parentFile, "${outputFile.name}.tmp")
         return try {
             var success = false
@@ -109,16 +125,19 @@ object VaultCrypto {
                 success = true
             }
 
-            if (success && tempOutput.exists() && tempOutput.length() > 0) {
+            if (success && tempOutput.exists()) {
                 if (outputFile.exists()) outputFile.delete()
-                tempOutput.renameTo(outputFile)
-                true
+                if (tempOutput.renameTo(outputFile)) {
+                    true
+                } else {
+                    tempOutput.delete()
+                    false
+                }
             } else {
                 tempOutput.delete()
                 false
             }
         } catch (e: Exception) {
-            e.printStackTrace()
             if (tempOutput.exists()) tempOutput.delete()
             false
         }
