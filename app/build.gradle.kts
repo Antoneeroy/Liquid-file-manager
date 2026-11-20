@@ -20,11 +20,11 @@ android {
     versionName = "1.2.0"
 
     // Configurable AdMob IDs & Privacy URL (Defaults to official Google Test Ad Unit IDs in dev builds)
-    val admobAppId = System.getenv("ADMOB_APP_ID") ?: "ca-app-pub-3940256099942544~3347511713"
-    val admobBannerId = System.getenv("ADMOB_BANNER_UNIT_ID") ?: "ca-app-pub-3940256099942544/6300978111"
-    val admobNativeId = System.getenv("ADMOB_NATIVE_UNIT_ID") ?: "ca-app-pub-3940256099942544/2247696110"
-    val admobInterstitialId = System.getenv("ADMOB_INTERSTITIAL_UNIT_ID") ?: "ca-app-pub-3940256099942544/1033173712"
-    val privacyPolicyUrl = System.getenv("PRIVACY_POLICY_URL") ?: "https://antoneeroy.github.io/Liquid-file-manager/privacy-policy.html"
+    val admobAppId = System.getenv("ADMOB_APP_ID")?.takeIf { it.isNotBlank() } ?: "ca-app-pub-3940256099942544~3347511713"
+    val admobBannerId = System.getenv("ADMOB_BANNER_UNIT_ID")?.takeIf { it.isNotBlank() } ?: "ca-app-pub-3940256099942544/6300978111"
+    val admobNativeId = System.getenv("ADMOB_NATIVE_UNIT_ID")?.takeIf { it.isNotBlank() } ?: "ca-app-pub-3940256099942544/2247696110"
+    val admobInterstitialId = System.getenv("ADMOB_INTERSTITIAL_UNIT_ID")?.takeIf { it.isNotBlank() } ?: "ca-app-pub-3940256099942544/1033173712"
+    val privacyPolicyUrl = System.getenv("PRIVACY_POLICY_URL")?.takeIf { it.isNotBlank() } ?: "https://antoneeroy.github.io/Liquid-file-manager/privacy-policy.html"
 
     manifestPlaceholders["ADMOB_APP_ID"] = admobAppId
     buildConfigField("String", "ADMOB_BANNER_UNIT_ID", "\"$admobBannerId\"")

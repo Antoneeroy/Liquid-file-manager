@@ -19,20 +19,48 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: 'gradle'
 
-      - name: Run unit & Robolectric tests
-        run: gradle :app:testDebugUnitTest --no-daemon
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
 
-      - name: Decode permanent release keystore
+      - name: Validate Production AdMob & Signing Secrets
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          ADMOB_APP_ID: ${{ secrets.ADMOB_APP_ID }}
+          ADMOB_BANNER_UNIT_ID: ${{ secrets.ADMOB_BANNER_UNIT_ID }}
+          ADMOB_NATIVE_UNIT_ID: ${{ secrets.ADMOB_NATIVE_UNIT_ID }}
+          ADMOB_INTERSTITIAL_UNIT_ID: ${{ secrets.ADMOB_INTERSTITIAL_UNIT_ID }}
         run: |
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "ERROR: Missing KEYSTORE_BASE64 GitHub secret."
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "ERROR: KEYSTORE_BASE64, STORE_PASSWORD, and KEY_PASSWORD GitHub Secrets are required."
             exit 1
           fi
+          for VAR_NAME in ADMOB_APP_ID ADMOB_BANNER_UNIT_ID ADMOB_NATIVE_UNIT_ID ADMOB_INTERSTITIAL_UNIT_ID; do
+            VAL="${!VAR_NAME}"
+            if [ -z "$VAL" ]; then
+              echo "ERROR: $VAR_NAME secret is missing. Configure live AdMob IDs before production release."
+              exit 1
+            fi
+            if [[ "$VAL" == ca-app-pub-3940256099942544* ]]; then
+              echo "ERROR: $VAR_NAME uses Google Test Ad IDs. Production release blocked."
+              exit 1
+            fi
+          done
+
+      - name: Decode permanent production keystore & verify alias
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+        run: |
           echo "$KEYSTORE_BASE64" | base64 --decode > "${{ github.workspace }}/release-signing.jks"
+          keytool -list -keystore "${{ github.workspace }}/release-signing.jks" -storepass "$STORE_PASSWORD" -alias upload > /dev/null
+
+      - name: Run Unit Tests & Release Vital Lint
+        run: gradle :app:testDebugUnitTest :app:lintVitalAnalyzeRelease --no-daemon
 
       - name: Build Signed Release APK and AAB
         env:
@@ -44,20 +72,23 @@ jobs:
           ADMOB_NATIVE_UNIT_ID: ${{ secrets.ADMOB_NATIVE_UNIT_ID }}
           ADMOB_INTERSTITIAL_UNIT_ID: ${{ secrets.ADMOB_INTERSTITIAL_UNIT_ID }}
           PRIVACY_POLICY_URL: ${{ secrets.PRIVACY_POLICY_URL }}
-        run: |
-          if [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_PASSWORD" ]; then
-            echo "ERROR: STORE_PASSWORD and KEY_PASSWORD secrets must be configured."
-            exit 1
-          fi
-          gradle :app:assembleRelease :app:bundleRelease --no-daemon
+        run: gradle :app:assembleRelease :app:bundleRelease --no-daemon
 
-      - name: Verify APK signature
+      - name: Verify Signed APK and AAB Certificates
         run: |
           APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          echo "Verifying signed APK: $APK_PATH"
-          jarsigner -verify -verbose -certs "$APK_PATH"
+          AAB_PATH=$(find app/build/outputs/bundle/release -name "*.aab" | head -n 1)
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name "apksigner" | sort -V | tail -n 1)
+          echo "Verifying APK: $APK_PATH"
+          if [ -n "$APKSIGNER" ]; then
+            "$APKSIGNER" verify --verbose --print-certs "$APK_PATH"
+          else
+            jarsigner -verify -verbose -certs "$APK_PATH"
+          fi
+          echo "Verifying AAB: $AAB_PATH"
+          jarsigner -verify -verbose -certs "$AAB_PATH"
 
-      - name: Upload Release Artifacts (APK for Uptodown & AAB for Google Play)
+      - name: Upload Signed Release Artifacts (APK for Uptodown & AAB for Google Play)
         uses: actions/upload-artifact@v4
         with:
           name: liquid-files-release-${{ github.ref_name }}
